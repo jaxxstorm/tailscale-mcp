@@ -1,0 +1,17 @@
+{
+    "schema_version": "v1",
+    "name_for_model": "ts_mcp",
+    "name_for_human": "Tailscale MCP",
+    "description_for_model": "Tailscale MCP server providing tools and resources for managing Tailscale networks via MCP.",
+    "description_for_human": "Interact with Tailscale using MCP tools over your Tailscale network.",
+    "auth": {
+      "type": "none"
+    },
+    "api": {
+      "type": "mcp",
+      "url": "https://mcp-sse.lbr.ts.net"
+    },
+    "logo_url": "https://tailscale.com/favicon.ico",
+    "contact_email": "mail@lbrlabs.com",
+    "legal_info_url": "https://tailscale.com/legal"
+  }
