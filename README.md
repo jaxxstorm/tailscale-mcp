@@ -92,7 +92,7 @@ Claude Desktop currently supports **stdio** mode for MCP servers.
 
 2. Edit `claude_desktop_config.json`:
 
-   ```json
+```json
    {
     "mcpServers": {
       "tailscale": {
@@ -107,7 +107,7 @@ Claude Desktop currently supports **stdio** mode for MCP servers.
       }
     }
   }
-   ```
+```
 
 3. Restart Claude Desktop.
    Claude Desktop will now recognize your MCP server.
