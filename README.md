@@ -118,10 +118,13 @@ Claude Desktop currently supports **stdio** mode for MCP servers.
 
 ### Resources
 
-| URI                  | Description                                              |
-| -------------------- | -------------------------------------------------------- |
-| `bootstrap://status` | Health-check endpoint.                                   |
-| `tailscale://device` | Query detailed device info (**limited client support**). |
+| URI                              | Description                                              |
+| -------------------------------- | -------------------------------------------------------- |
+| `bootstrap://status`             | Health-check endpoint.                                   |
+| `tailscale://device`             | Query detailed device info (**limited client support**). |
+| `tailscale://policy-file`        | Retrieve the tailnet ACL policy file.                    |
+| `tailscale://tailnet-settings`   | Retrieve current tailnet settings and configuration.     |
+
 
 ### Tools (recommended for Claude):
 

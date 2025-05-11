@@ -1,6 +1,5 @@
 // main.go
 
-
 package main
 
 import (
@@ -14,6 +13,7 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"github.com/tailscale/hujson"
 	"tailscale.com/client/local"
 	tsapi "tailscale.com/client/tailscale/v2"
 	"tailscale.com/tsnet"
@@ -30,7 +30,7 @@ type CLI struct {
 	Stdio    bool   `help:"Use stdio mode instead of SSE" default:"false"`
 }
 
-var buildVersion = "0.0.1"
+var buildVersion = "0.0.2"
 
 func main() {
 	var cli CLI
@@ -58,6 +58,94 @@ func main() {
 				mcp.TextResourceContents{URI: "bootstrap://status", MIMEType: "text/plain", Text: "up"},
 			}, nil
 		})
+
+	devicesResource := mcp.NewResource(
+		"tailscale://devices",
+		"List all devices in the tailnet",
+		mcp.WithMIMEType("application/json"),
+	)
+
+	mcpServer.AddResource(devicesResource, func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+		devices, err := tsAdminClient.Devices().ListWithAllFields(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		data, err := json.MarshalIndent(devices, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+
+		return []mcp.ResourceContents{
+			mcp.TextResourceContents{
+				URI:      "tailscale://devices",
+				MIMEType: "application/json",
+				Text:     string(data),
+			},
+		}, nil
+	})
+
+	// Resource: policy_file
+	policyResource := mcp.NewResource(
+		"tailscale://policy",
+		"Fetch the current Tailscale policy file (ACL)",
+		mcp.WithMIMEType("application/json"),
+	)
+
+	mcpServer.AddResource(policyResource,
+		func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+			policy, err := tsAdminClient.PolicyFile().Raw(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("failed to fetch policy file: %w", err)
+			}
+
+			parsed, err := hujson.Parse([]byte(policy.HuJSON))
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse HuJSON policy file: %w", err)
+			}
+			parsed.Standardize()
+
+			var standardizedPolicy interface{}
+			if err := json.Unmarshal(parsed.Pack(), &standardizedPolicy); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal standardized policy JSON: %w", err)
+			}
+
+			data, err := json.MarshalIndent(standardizedPolicy, "", "  ")
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal standardized policy JSON: %w", err)
+			}
+
+			return []mcp.ResourceContents{
+				mcp.TextResourceContents{
+					URI:      "tailscale://policy",
+					MIMEType: "application/json",
+					Text:     string(data),
+				},
+			}, nil
+		})
+
+	// Resource: Tailnet Settings
+	mcpServer.AddResource(mcp.NewResource("tailscale://tailnet-settings", "Tailnet Settings",
+		mcp.WithMIMEType("application/json"),
+	), func(ctx context.Context, _ mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+		settings, err := tsAdminClient.TailnetSettings().Get(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch tailnet settings: %w", err)
+		}
+
+		data, err := json.MarshalIndent(settings, "", "  ")
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal tailnet settings: %w", err)
+		}
+
+		return []mcp.ResourceContents{
+			mcp.TextResourceContents{
+				URI:      "tailscale://tailnet-settings",
+				MIMEType: "application/json",
+				Text:     string(data),
+			},
+		}, nil
+	})
 
 	// Resource: device
 	// NOTE: many clients don't support resources right now
@@ -173,7 +261,6 @@ func main() {
 	if err := http.Serve(tsLn, handlerWithMiddleware); err != nil {
 		kctx.FatalIfErrorf(err)
 	}
-
 
 }
 
