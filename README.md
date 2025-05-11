@@ -11,35 +11,81 @@ An MCP (Model Context Protocol) server for Tailscale, enabling detailed queries 
 
 ---
 
+Here's your updated **Installation** section with clear instructions for downloading pre-built binaries from your GitHub releases, organized by platform:
+
+---
+
 ## ✅ Installation
 
-### Prerequisites:
+### Prerequisites
+
+* [Tailscale](https://tailscale.com) account with an Admin API key.
+
+### 📥 Download Pre-Built Binaries
+
+Grab the latest pre-built binary for your platform from the release page.
+
+#### **macOS**
+
+1. Download the latest release archive for macOS (`tailscale-mcp-<version>-darwin-amd64.tar.gz` or `tailscale-mcp-<version>-darwin-arm64.tar.gz`).
+2. Extract and install:
+
+```bash
+tar -xzf tailscale-mcp-<version>-darwin-*.tar.gz
+sudo mv tailscale-mcp /usr/local/bin/
+```
+
+You can also install with homebrew using `brew install jaxxstorm/tap/tailscale-mcp`
+
+#### **Linux**
+
+1. Download the latest release archive for Linux (`tailscale-mcp-<version>-linux-amd64.tar.gz` or `tailscale-mcp-<version>-linux-arm64.tar.gz`).
+2. Extract and install:
+
+```bash
+tar -xzf tailscale-mcp-<version>-linux-*.tar.gz
+sudo mv tailscale-mcp /usr/local/bin/
+```
+
+#### **Windows**
+
+1. Download the latest release ZIP archive for Windows (`tailscale-mcp-<version>-windows-amd64.zip` or `tailscale-mcp-<version>-windows-arm64.zip`).
+2. Extract the binary (`tailscale-mcp.exe`) and move it to a preferred location, such as `C:\Program Files\tailscale-mcp\`.
+3. Add the chosen location to your system's PATH if desired for convenience.
+
+---
+
+### 🔨 Building From Source (Optional)
+
+If you prefer building the binary from source, follow these steps:
+
+#### Prerequisites
 
 * [Go 1.22 or higher](https://golang.org/dl/)
-* [Tailscale](https://tailscale.com) account and Admin API key.
 
-### Steps:
+#### Steps
 
 1. **Clone the Repository**
 
-   ```bash
-   git clone <repo_url>
-   cd <repo_dir>
-   ```
+```bash
+git clone <repo_url>
+cd <repo_dir>
+```
 
 2. **Install Dependencies**
 
-   ```bash
-   go mod tidy
-   ```
+```bash
+go mod tidy
+```
 
 3. **Build the Binary**
 
-   ```bash
-   go build -o tailscale-mcp main.go
-   ```
+```bash
+go build -o tailscale-mcp main.go
+```
 
 ---
+
 
 ## 🔑 API Key Configuration
 
