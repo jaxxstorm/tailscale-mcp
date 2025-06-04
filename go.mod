@@ -9,7 +9,7 @@ require (
 	github.com/mark3labs/mcp-go v0.26.0
 	github.com/tailscale/hujson v0.0.0-20221223112325-20486734a56a
 	tailscale.com v1.82.5
-	tailscale.com/client/tailscale/v2 v2.0.0-20250502205821-61a211e0f308
+	tailscale.com/client/tailscale/v2 v2.0.0-20250602205246-d51fc603f5ea
 )
 
 require (
