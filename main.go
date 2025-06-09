@@ -43,6 +43,54 @@ type MCPCapability struct {
 	Resources []string `json:"resources"`
 }
 
+// PermissionError represents a structured permission error response
+type PermissionError struct {
+	Error       string            `json:"error"`
+	Code        string            `json:"code"`
+	Action      string            `json:"action"`
+	Details     PermissionDetails `json:"details"`
+	Suggestions []string          `json:"suggestions"`
+}
+
+// PermissionDetails provides context about the permission failure
+type PermissionDetails struct {
+	User               string   `json:"user"`
+	RequestedItem      string   `json:"requested_item"`
+	ItemType           string   `json:"item_type"` // "tool" or "resource"
+	RequiredCapability string   `json:"required_capability"`
+	UserCapabilities   []string `json:"user_capabilities,omitempty"`
+}
+
+// createPermissionErrorJSON creates a structured JSON error response for permission failures
+func createPermissionErrorJSON(user, itemName, itemType string, userCapabilities []string) string {
+	permError := PermissionError{
+		Error:  "Permission denied",
+		Code:   "INSUFFICIENT_PERMISSIONS",
+		Action: "Contact your Tailscale administrator to request access",
+		Details: PermissionDetails{
+			User:               user,
+			RequestedItem:      itemName,
+			ItemType:           itemType,
+			RequiredCapability: "jaxxstorm.com/cap/mcp",
+			UserCapabilities:   userCapabilities,
+		},
+		Suggestions: []string{
+			"Ask your Tailscale administrator to add MCP capabilities to your user account",
+			fmt.Sprintf("Request access to the '%s' %s in your Tailscale ACL policy", itemName, itemType),
+			"Verify you're authenticated with the correct Tailscale account",
+			"Check if your organization has specific MCP access policies",
+		},
+	}
+
+	jsonBytes, err := json.MarshalIndent(permError, "", "  ")
+	if err != nil {
+		// Fallback to simple error if JSON marshaling fails
+		return `{"error": "Permission denied", "message": "Unable to format detailed error response"}`
+	}
+
+	return string(jsonBytes)
+}
+
 // initLogger initializes the Zap logger based on environment and debug settings
 func initLogger(debug bool) {
 	var config zap.Config
@@ -165,12 +213,14 @@ func checkToolAccess(ctx context.Context, toolName string) error {
 	caps, user, err := getTailscaleCapabilities(ctx)
 	if err != nil {
 		logger.Error("Failed to get capabilities", zap.Error(err))
-		return fmt.Errorf("access denied: unable to verify permissions")
+		errorJSON := createPermissionErrorJSON(user, toolName, "tool", []string{})
+		return fmt.Errorf(errorJSON)
 	}
 
 	if caps == nil {
 		logger.Warn("No MCP capabilities found", zap.String("user", user))
-		return fmt.Errorf("access denied: no MCP permissions configured")
+		errorJSON := createPermissionErrorJSON(user, toolName, "tool", []string{})
+		return fmt.Errorf(errorJSON)
 	}
 
 	// Check if user has access to this specific tool
@@ -189,7 +239,8 @@ func checkToolAccess(ctx context.Context, toolName string) error {
 		zap.String("tool", toolName),
 		zap.Strings("allowed_tools", caps.Tools),
 	)
-	return fmt.Errorf("access denied: insufficient permissions for tool '%s'", toolName)
+	errorJSON := createPermissionErrorJSON(user, toolName, "tool", caps.Tools)
+	return fmt.Errorf(errorJSON)
 }
 
 // checkResourceAccess validates if the user has access to a specific resource
@@ -197,12 +248,14 @@ func checkResourceAccess(ctx context.Context, resourceURI string) error {
 	caps, user, err := getTailscaleCapabilities(ctx)
 	if err != nil {
 		logger.Error("Failed to get capabilities", zap.Error(err))
-		return fmt.Errorf("access denied: unable to verify permissions")
+		errorJSON := createPermissionErrorJSON(user, resourceURI, "resource", []string{})
+		return fmt.Errorf(errorJSON)
 	}
 
 	if caps == nil {
 		logger.Warn("No MCP capabilities found", zap.String("user", user))
-		return fmt.Errorf("access denied: no MCP permissions configured")
+		errorJSON := createPermissionErrorJSON(user, resourceURI, "resource", []string{})
+		return fmt.Errorf(errorJSON)
 	}
 
 	// Check if user has access to this specific resource
@@ -221,7 +274,8 @@ func checkResourceAccess(ctx context.Context, resourceURI string) error {
 		zap.String("resource", resourceURI),
 		zap.Strings("allowed_resources", caps.Resources),
 	)
-	return fmt.Errorf("access denied: insufficient permissions for resource '%s'", resourceURI)
+	errorJSON := createPermissionErrorJSON(user, resourceURI, "resource", caps.Resources)
+	return fmt.Errorf(errorJSON)
 }
 
 // loggingMiddleware logs all incoming requests
@@ -514,7 +568,7 @@ func main() {
 
 		// Check access
 		if err := checkToolAccess(ctx, "list_all_devices"); err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
+			return mcp.NewToolResultText(err.Error()), nil
 		}
 
 		devices, err := tsAdminClient.Devices().List(ctx)
