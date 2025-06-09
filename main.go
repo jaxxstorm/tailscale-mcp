@@ -251,7 +251,7 @@ func loggingMiddleware(next http.Handler) http.Handler {
 
 func main() {
 	var cli CLI
-	kctx := kong.Parse(&cli)
+	kong.Parse(&cli)
 
 	// Initialize logger early
 	initLogger(cli.Debug)

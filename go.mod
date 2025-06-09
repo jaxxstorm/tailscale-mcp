@@ -8,6 +8,8 @@ require (
 	github.com/alecthomas/kong v1.10.0
 	github.com/mark3labs/mcp-go v0.31.0
 	github.com/tailscale/hujson v0.0.0-20221223112325-20486734a56a
+	go.uber.org/zap v1.27.0
+	golang.org/x/term v0.29.0
 	tailscale.com v1.82.5
 	tailscale.com/client/tailscale/v2 v2.0.0-20250502205821-61a211e0f308
 )
@@ -74,6 +76,7 @@ require (
 	github.com/vishvananda/netns v0.0.4 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
+	go.uber.org/multierr v1.11.0 // indirect
 	go4.org/mem v0.0.0-20240501181205-ae6ca9944745 // indirect
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
 	golang.org/x/crypto v0.35.0 // indirect
@@ -83,7 +86,6 @@ require (
 	golang.org/x/oauth2 v0.26.0 // indirect
 	golang.org/x/sync v0.11.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
-	golang.org/x/term v0.29.0 // indirect
 	golang.org/x/text v0.22.0 // indirect
 	golang.org/x/time v0.10.0 // indirect
 	golang.org/x/tools v0.30.0 // indirect
