@@ -5,7 +5,7 @@ go 1.24.0
 toolchain go1.24.3
 
 require (
-	github.com/alecthomas/kong v1.10.0
+	github.com/alecthomas/kong v1.11.0
 	github.com/mark3labs/mcp-go v0.31.0
 	github.com/tailscale/hujson v0.0.0-20221223112325-20486734a56a
 	tailscale.com v1.82.5
