@@ -1,7 +1,9 @@
 package mcpcoverage
 
+import "github.com/jaxxstorm/tailscale-mcp/internal/readapi"
+
 func CurrentMappings() []Mapping {
-	return []Mapping{
+	mappings := []Mapping{
 		{
 			OperationID:     "listTailnetDevices",
 			Type:            MappingTool,
@@ -33,4 +35,39 @@ func CurrentMappings() []Mapping {
 			Rationale:       "Tailnet settings are stable tailnet state exposed as JSON.",
 		},
 	}
+
+	for _, endpoint := range readapi.ToolEndpoints() {
+		rationale := "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
+		if endpoint.Confirm != "" {
+			rationale = "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token."
+		}
+		mappings = append(mappings, Mapping{
+			OperationID:     endpoint.OperationID,
+			Type:            MappingTool,
+			Name:            endpoint.ToolName,
+			GrantPermission: ToolGrant(endpoint.ToolName),
+			Rationale:       rationale,
+			Confirmation:    endpoint.Confirm,
+		})
+	}
+	for _, resource := range readapi.Resources() {
+		mappings = append(mappings, Mapping{
+			OperationID:     resource.OperationID,
+			Type:            MappingResource,
+			URI:             resource.URI,
+			GrantPermission: ResourceGrant(resource.URI),
+			Rationale:       "Stable tailnet state is exposed as an MCP JSON resource through the generic read API resource registrar.",
+		})
+	}
+	for _, resource := range readapi.ResourceTemplates() {
+		mappings = append(mappings, Mapping{
+			OperationID:     resource.OperationID,
+			Type:            MappingResource,
+			URI:             resource.URI,
+			GrantPermission: ResourceGrant(resource.URI),
+			Rationale:       "Parameterized device state is exposed as an MCP JSON resource template through the generic read API resource registrar.",
+		})
+	}
+
+	return mappings
 }

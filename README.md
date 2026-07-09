@@ -5,7 +5,7 @@ An MCP (Model Context Protocol) server for Tailscale, enabling detailed queries 
 ## Features
 
 * **Multiple Server Modes**: Supports both stdio and HTTP (with SSE) modes
-* **Comprehensive Tailscale Integration**: Query devices, policy files, and tailnet settings
+* **Comprehensive Tailscale Integration**: Query devices, DNS, users, invites, keys, webhooks, services, logging, policy validation, and tailnet settings
 * **OAuth Grants Authorization**: Fine-grained access control using Tailscale grants with custom MCP capabilities
 * **Dual Network Access**: Accessible via both Tailscale network and localhost
 * **Claude Desktop Compatible**: Optimized for Claude Desktop integration
@@ -99,10 +99,12 @@ export TS_AUTH_KEY=""                # Tailscale auth key for automatic authenti
 ## Getting Your API Key
 
 1. Go to [Tailscale Admin Console](https://login.tailscale.com/admin/settings/keys)
-2. Generate an API key with the following permissions:
+2. Generate an API key with the read permissions needed for the tools and resources you plan to expose, such as:
    - Read devices
+   - Read DNS settings
    - Read policy file
    - Read tailnet settings
+   - Read users, invites, keys, webhooks, services, logging, OAuth apps, or posture integrations as needed
 
 ## OAuth Grants & Access Control
 
@@ -144,6 +146,7 @@ Add the following to your Tailscale ACL policy file:
 **Tools**: Control which MCP tools users can execute
 - `get_device_info`: Allow querying specific device details
 - `list_all_devices`: Allow listing all devices
+- `tailscale_<operation>`: Allow a generated Tailscale read API tool, for example `tailscale_get_dns_configuration`
 - `*`: Allow all tools
 
 **Resources**: Control which MCP resources users can access
@@ -152,6 +155,7 @@ Add the following to your Tailscale ACL policy file:
 - `tailscale://policy`: Policy file access
 - `tailscale://tailnet-settings`: Tailnet settings access
 - `tailscale://device`: Individual device resource access
+- `tailscale://dns/*`, `tailscale://keys`, `tailscale://webhooks`, `tailscale://services`, `tailscale://oauth-apps`, and similar read API resources
 - `*`: Allow all resources
 
 ## Running the Server
@@ -213,6 +217,10 @@ Claude will now recognize your MCP server and you can interact with your Tailsca
 | `get_device_info` | Fetch device details by ID, IP, or hostname | `device`: Device identifier | `get_device_info` |
 | `list_all_devices` | List all devices in your tailnet | None | `list_all_devices` |
 
+Additional Tailscale API tools are generated from endpoint definitions using `tailscale_<operation>` grant names. Examples include `tailscale_get_dns_configuration`, `tailscale_list_users`, `tailscale_get_key`, `tailscale_list_webhooks`, `tailscale_list_services`, `tailscale_get_oauth_app`, and `tailscale_validate_and_test_policy_file`.
+
+Generated tools cover the full Tailscale OpenAPI snapshot. Mutating create/update/delete tools require a `confirm` argument whose value is the OpenAPI operation ID, for example `confirm: "deleteDevice"`. This is in addition to Tailscale MCP grants and Admin API token permissions.
+
 ### Resources
 
 | URI | Description | Required Grant |
@@ -222,12 +230,25 @@ Claude will now recognize your MCP server and you can interact with your Tailsca
 | `tailscale://policy` | Current Tailscale ACL policy file | `tailscale://policy` |
 | `tailscale://tailnet-settings` | Tailnet configuration and settings | `tailscale://tailnet-settings` |
 | `tailscale://device` | Individual device details (parameterized) | `tailscale://device` |
+| `tailscale://device/{deviceId}/routes` | Device subnet routes | `tailscale://device/{deviceId}/routes` |
+| `tailscale://device/{deviceId}/attributes` | Device posture attributes | `tailscale://device/{deviceId}/attributes` |
+| `tailscale://dns/configuration` | Full DNS configuration | `tailscale://dns/configuration` |
+| `tailscale://dns/nameservers` | DNS nameservers | `tailscale://dns/nameservers` |
+| `tailscale://dns/preferences` | DNS preferences | `tailscale://dns/preferences` |
+| `tailscale://dns/searchpaths` | DNS search paths | `tailscale://dns/searchpaths` |
+| `tailscale://dns/split-dns` | Split DNS settings | `tailscale://dns/split-dns` |
+| `tailscale://keys` | Active keys visible to the API token | `tailscale://keys` |
+| `tailscale://user-invites` | Open user invites | `tailscale://user-invites` |
+| `tailscale://webhooks` | Webhooks | `tailscale://webhooks` |
+| `tailscale://services` | Services | `tailscale://services` |
+| `tailscale://posture/integrations` | Posture integrations | `tailscale://posture/integrations` |
+| `tailscale://oauth-apps` | OAuth apps | `tailscale://oauth-apps` |
 
 **Note**: Tools are preferred for Claude Desktop as they provide better compatibility and error handling.
 
 ## API Coverage
 
-Full Tailscale API parity is tracked with repository tooling under `tools/coverage/`. The tooling maps each Tailscale OpenAPI operation to an MCP tool, resource, prompt workflow, or reviewed exclusion, then writes generated reports under `coverage/`.
+Full Tailscale API parity is tracked with repository tooling under `tools/coverage/`. The tooling maps each Tailscale OpenAPI operation to an MCP tool, resource, prompt workflow, or reviewed exclusion, then writes generated reports under `coverage/`. The current vendored OpenAPI snapshot is fully mapped.
 
 Refresh the vendored Tailscale OpenAPI snapshot with:
 

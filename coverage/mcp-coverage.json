@@ -10,8 +10,10 @@
         "summary": "Get contacts"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_get_contacts",
+      "grantPermission": "tool:tailscale_get_contacts",
+      "status": "implemented",
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
     },
     {
       "operation": {
@@ -22,8 +24,11 @@
         "summary": "Update contact"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_update_contact",
+      "grantPermission": "tool:tailscale_update_contact",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "updateContact"
     },
     {
       "operation": {
@@ -34,8 +39,11 @@
         "summary": "Resend verification email"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_resend_contact_verification_email",
+      "grantPermission": "tool:tailscale_resend_contact_verification_email",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "resendContactVerificationEmail"
     },
     {
       "operation": {
@@ -45,9 +53,11 @@
         "domain": "DNS",
         "summary": "Get DNS configuration"
       },
-      "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mappingType": "resource",
+      "resourceUri": "tailscale://dns/configuration",
+      "grantPermission": "resource:tailscale://dns/configuration",
+      "status": "implemented",
+      "rationale": "Stable tailnet state is exposed as an MCP JSON resource through the generic read API resource registrar."
     },
     {
       "operation": {
@@ -58,8 +68,11 @@
         "summary": "Set DNS configuration"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_set_dns_configuration",
+      "grantPermission": "tool:tailscale_set_dns_configuration",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "setDnsConfiguration"
     },
     {
       "operation": {
@@ -69,9 +82,11 @@
         "domain": "DNS",
         "summary": "List DNS nameservers"
       },
-      "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mappingType": "resource",
+      "resourceUri": "tailscale://dns/nameservers",
+      "grantPermission": "resource:tailscale://dns/nameservers",
+      "status": "implemented",
+      "rationale": "Stable tailnet state is exposed as an MCP JSON resource through the generic read API resource registrar."
     },
     {
       "operation": {
@@ -82,8 +97,11 @@
         "summary": "Set DNS nameservers"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_set_dns_nameservers",
+      "grantPermission": "tool:tailscale_set_dns_nameservers",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "setDnsNameservers"
     },
     {
       "operation": {
@@ -93,9 +111,11 @@
         "domain": "DNS",
         "summary": "Get DNS preferences"
       },
-      "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mappingType": "resource",
+      "resourceUri": "tailscale://dns/preferences",
+      "grantPermission": "resource:tailscale://dns/preferences",
+      "status": "implemented",
+      "rationale": "Stable tailnet state is exposed as an MCP JSON resource through the generic read API resource registrar."
     },
     {
       "operation": {
@@ -106,8 +126,11 @@
         "summary": "Set DNS preferences"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_set_dns_preferences",
+      "grantPermission": "tool:tailscale_set_dns_preferences",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "setDnsPreferences"
     },
     {
       "operation": {
@@ -117,9 +140,11 @@
         "domain": "DNS",
         "summary": "List DNS search paths"
       },
-      "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mappingType": "resource",
+      "resourceUri": "tailscale://dns/searchpaths",
+      "grantPermission": "resource:tailscale://dns/searchpaths",
+      "status": "implemented",
+      "rationale": "Stable tailnet state is exposed as an MCP JSON resource through the generic read API resource registrar."
     },
     {
       "operation": {
@@ -130,8 +155,11 @@
         "summary": "Set DNS search paths"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_set_dns_search_paths",
+      "grantPermission": "tool:tailscale_set_dns_search_paths",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "setDnsSearchPaths"
     },
     {
       "operation": {
@@ -141,9 +169,11 @@
         "domain": "DNS",
         "summary": "Get split DNS"
       },
-      "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mappingType": "resource",
+      "resourceUri": "tailscale://dns/split-dns",
+      "grantPermission": "resource:tailscale://dns/split-dns",
+      "status": "implemented",
+      "rationale": "Stable tailnet state is exposed as an MCP JSON resource through the generic read API resource registrar."
     },
     {
       "operation": {
@@ -154,8 +184,11 @@
         "summary": "Update split DNS"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_update_split_dns",
+      "grantPermission": "tool:tailscale_update_split_dns",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "updateSplitDns"
     },
     {
       "operation": {
@@ -166,8 +199,11 @@
         "summary": "Set split DNS"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_set_split_dns",
+      "grantPermission": "tool:tailscale_set_split_dns",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "setSplitDns"
     },
     {
       "operation": {
@@ -178,8 +214,11 @@
         "summary": "Accept a device invite"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_accept_device_invite",
+      "grantPermission": "tool:tailscale_accept_device_invite",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "acceptDeviceInvite"
     },
     {
       "operation": {
@@ -190,8 +229,12 @@
         "summary": "Delete a device invite"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_delete_device_invite",
+      "grantPermission": "tool:tailscale_delete_device_invite",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "destructive": true,
+      "confirmation": "deleteDeviceInvite"
     },
     {
       "operation": {
@@ -202,8 +245,10 @@
         "summary": "Get a device invite"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_get_device_invite",
+      "grantPermission": "tool:tailscale_get_device_invite",
+      "status": "implemented",
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
     },
     {
       "operation": {
@@ -214,8 +259,11 @@
         "summary": "Resend a device invite"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_resend_device_invite",
+      "grantPermission": "tool:tailscale_resend_device_invite",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "resendDeviceInvite"
     },
     {
       "operation": {
@@ -226,8 +274,10 @@
         "summary": "List device invites"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_list_device_invites",
+      "grantPermission": "tool:tailscale_list_device_invites",
+      "status": "implemented",
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
     },
     {
       "operation": {
@@ -238,8 +288,11 @@
         "summary": "Create device invites"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_create_device_invites",
+      "grantPermission": "tool:tailscale_create_device_invites",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "createDeviceInvites"
     },
     {
       "operation": {
@@ -250,8 +303,12 @@
         "summary": "Delete a posture integration"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_delete_posture_integration",
+      "grantPermission": "tool:tailscale_delete_posture_integration",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "destructive": true,
+      "confirmation": "deletePostureIntegration"
     },
     {
       "operation": {
@@ -262,8 +319,10 @@
         "summary": "Get a posture integration"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_get_posture_integration",
+      "grantPermission": "tool:tailscale_get_posture_integration",
+      "status": "implemented",
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
     },
     {
       "operation": {
@@ -274,8 +333,11 @@
         "summary": "Update a posture integration"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_update_posture_integration",
+      "grantPermission": "tool:tailscale_update_posture_integration",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "updatePostureIntegration"
     },
     {
       "operation": {
@@ -285,9 +347,11 @@
         "domain": "DevicePosture",
         "summary": "List all posture integrations"
       },
-      "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mappingType": "resource",
+      "resourceUri": "tailscale://posture/integrations",
+      "grantPermission": "resource:tailscale://posture/integrations",
+      "status": "implemented",
+      "rationale": "Stable tailnet state is exposed as an MCP JSON resource through the generic read API resource registrar."
     },
     {
       "operation": {
@@ -298,8 +362,11 @@
         "summary": "Create a posture integration"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_create_posture_integration",
+      "grantPermission": "tool:tailscale_create_posture_integration",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "createPostureIntegration"
     },
     {
       "operation": {
@@ -310,8 +377,12 @@
         "summary": "Delete a device"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_delete_device",
+      "grantPermission": "tool:tailscale_delete_device",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "destructive": true,
+      "confirmation": "deleteDevice"
     },
     {
       "operation": {
@@ -336,9 +407,11 @@
         "domain": "Devices",
         "summary": "Get device posture attributes"
       },
-      "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mappingType": "resource",
+      "resourceUri": "tailscale://device/{deviceId}/attributes",
+      "grantPermission": "resource:tailscale://device/{deviceId}/attributes",
+      "status": "implemented",
+      "rationale": "Parameterized device state is exposed as an MCP JSON resource template through the generic read API resource registrar."
     },
     {
       "operation": {
@@ -349,8 +422,12 @@
         "summary": "Delete custom device posture attributes"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_delete_custom_device_posture_attributes",
+      "grantPermission": "tool:tailscale_delete_custom_device_posture_attributes",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "destructive": true,
+      "confirmation": "deleteCustomDevicePostureAttributes"
     },
     {
       "operation": {
@@ -361,8 +438,11 @@
         "summary": "Set custom device posture attributes"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_set_custom_device_posture_attributes",
+      "grantPermission": "tool:tailscale_set_custom_device_posture_attributes",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "setCustomDevicePostureAttributes"
     },
     {
       "operation": {
@@ -373,8 +453,11 @@
         "summary": "Authorize device"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_authorize_device",
+      "grantPermission": "tool:tailscale_authorize_device",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "authorizeDevice"
     },
     {
       "operation": {
@@ -385,8 +468,12 @@
         "summary": "Expire a device's key"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_expire_device_key",
+      "grantPermission": "tool:tailscale_expire_device_key",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "destructive": true,
+      "confirmation": "expireDeviceKey"
     },
     {
       "operation": {
@@ -397,8 +484,11 @@
         "summary": "Set device IPv4 address"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_set_device_ip",
+      "grantPermission": "tool:tailscale_set_device_ip",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "setDeviceIp"
     },
     {
       "operation": {
@@ -409,8 +499,11 @@
         "summary": "Update device key"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_update_device_key",
+      "grantPermission": "tool:tailscale_update_device_key",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "updateDeviceKey"
     },
     {
       "operation": {
@@ -421,8 +514,11 @@
         "summary": "Set device name"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_set_device_name",
+      "grantPermission": "tool:tailscale_set_device_name",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "setDeviceName"
     },
     {
       "operation": {
@@ -432,9 +528,11 @@
         "domain": "Devices",
         "summary": "List device routes"
       },
-      "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mappingType": "resource",
+      "resourceUri": "tailscale://device/{deviceId}/routes",
+      "grantPermission": "resource:tailscale://device/{deviceId}/routes",
+      "status": "implemented",
+      "rationale": "Parameterized device state is exposed as an MCP JSON resource template through the generic read API resource registrar."
     },
     {
       "operation": {
@@ -445,8 +543,11 @@
         "summary": "Set device routes"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_set_device_routes",
+      "grantPermission": "tool:tailscale_set_device_routes",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "setDeviceRoutes"
     },
     {
       "operation": {
@@ -457,8 +558,11 @@
         "summary": "Set device tags"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_set_device_tags",
+      "grantPermission": "tool:tailscale_set_device_tags",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "setDeviceTags"
     },
     {
       "operation": {
@@ -469,8 +573,11 @@
         "summary": "Batch update custom device posture attributes"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_batch_update_custom_device_posture_attributes",
+      "grantPermission": "tool:tailscale_batch_update_custom_device_posture_attributes",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "batchUpdateCustomDevicePostureAttributes"
     },
     {
       "operation": {
@@ -495,9 +602,11 @@
         "domain": "Keys",
         "summary": "List tailnet keys"
       },
-      "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mappingType": "resource",
+      "resourceUri": "tailscale://keys",
+      "grantPermission": "resource:tailscale://keys",
+      "status": "implemented",
+      "rationale": "Stable tailnet state is exposed as an MCP JSON resource through the generic read API resource registrar."
     },
     {
       "operation": {
@@ -508,8 +617,11 @@
         "summary": "Create an auth key or trust credential"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_create_key",
+      "grantPermission": "tool:tailscale_create_key",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "createKey"
     },
     {
       "operation": {
@@ -520,8 +632,12 @@
         "summary": "Delete key"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_delete_key",
+      "grantPermission": "tool:tailscale_delete_key",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "destructive": true,
+      "confirmation": "deleteKey"
     },
     {
       "operation": {
@@ -532,8 +648,10 @@
         "summary": "Get key"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_get_key",
+      "grantPermission": "tool:tailscale_get_key",
+      "status": "implemented",
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
     },
     {
       "operation": {
@@ -544,8 +662,11 @@
         "summary": "Set key"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_set_key",
+      "grantPermission": "tool:tailscale_set_key",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "setKey"
     },
     {
       "operation": {
@@ -556,8 +677,11 @@
         "summary": "Create or get AWS external id"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_get_aws_external_id",
+      "grantPermission": "tool:tailscale_get_aws_external_id",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "getAwsExternalId"
     },
     {
       "operation": {
@@ -568,8 +692,10 @@
         "summary": "Validate external ID integration with IAM role trust policy"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_validate_aws_external_id",
+      "grantPermission": "tool:tailscale_validate_aws_external_id",
+      "status": "implemented",
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
     },
     {
       "operation": {
@@ -580,8 +706,10 @@
         "summary": "List configuration audit logs"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_list_configuration_audit_logs",
+      "grantPermission": "tool:tailscale_list_configuration_audit_logs",
+      "status": "implemented",
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
     },
     {
       "operation": {
@@ -592,8 +720,10 @@
         "summary": "List network flow logs"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_list_network_flow_logs",
+      "grantPermission": "tool:tailscale_list_network_flow_logs",
+      "status": "implemented",
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
     },
     {
       "operation": {
@@ -604,8 +734,12 @@
         "summary": "Disable log streaming"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_disable_log_streaming",
+      "grantPermission": "tool:tailscale_disable_log_streaming",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "destructive": true,
+      "confirmation": "disableLogStreaming"
     },
     {
       "operation": {
@@ -616,8 +750,10 @@
         "summary": "Get log streaming configuration"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_get_log_streaming_configuration",
+      "grantPermission": "tool:tailscale_get_log_streaming_configuration",
+      "status": "implemented",
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
     },
     {
       "operation": {
@@ -628,8 +764,11 @@
         "summary": "Set log streaming configuration"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_set_log_streaming_configuration",
+      "grantPermission": "tool:tailscale_set_log_streaming_configuration",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "setLogStreamingConfiguration"
     },
     {
       "operation": {
@@ -640,8 +779,10 @@
         "summary": "Get log streaming status"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_get_log_streaming_status",
+      "grantPermission": "tool:tailscale_get_log_streaming_status",
+      "status": "implemented",
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
     },
     {
       "operation": {
@@ -651,9 +792,11 @@
         "domain": "OAuthApps",
         "summary": "List OAuth apps"
       },
-      "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mappingType": "resource",
+      "resourceUri": "tailscale://oauth-apps",
+      "grantPermission": "resource:tailscale://oauth-apps",
+      "status": "implemented",
+      "rationale": "Stable tailnet state is exposed as an MCP JSON resource through the generic read API resource registrar."
     },
     {
       "operation": {
@@ -664,8 +807,11 @@
         "summary": "Create an OAuth app"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_create_oauth_app",
+      "grantPermission": "tool:tailscale_create_oauth_app",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "createOAuthApp"
     },
     {
       "operation": {
@@ -676,8 +822,12 @@
         "summary": "Delete OAuth app"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_delete_oauth_app",
+      "grantPermission": "tool:tailscale_delete_oauth_app",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "destructive": true,
+      "confirmation": "deleteOAuthApp"
     },
     {
       "operation": {
@@ -688,8 +838,10 @@
         "summary": "Get OAuth app"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_get_oauth_app",
+      "grantPermission": "tool:tailscale_get_oauth_app",
+      "status": "implemented",
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
     },
     {
       "operation": {
@@ -700,8 +852,11 @@
         "summary": "Update OAuth app"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_update_oauth_app",
+      "grantPermission": "tool:tailscale_update_oauth_app",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "updateOAuthApp"
     },
     {
       "operation": {
@@ -726,8 +881,11 @@
         "summary": "Set policy file"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_set_policy_file",
+      "grantPermission": "tool:tailscale_set_policy_file",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "setPolicyFile"
     },
     {
       "operation": {
@@ -738,8 +896,10 @@
         "summary": "Preview rule matches"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_preview_rule_matches",
+      "grantPermission": "tool:tailscale_preview_rule_matches",
+      "status": "implemented",
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
     },
     {
       "operation": {
@@ -750,8 +910,10 @@
         "summary": "Validate and test policy file"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_validate_and_test_policy_file",
+      "grantPermission": "tool:tailscale_validate_and_test_policy_file",
+      "status": "implemented",
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
     },
     {
       "operation": {
@@ -761,9 +923,11 @@
         "domain": "Services",
         "summary": "List all Services"
       },
-      "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mappingType": "resource",
+      "resourceUri": "tailscale://services",
+      "grantPermission": "resource:tailscale://services",
+      "status": "implemented",
+      "rationale": "Stable tailnet state is exposed as an MCP JSON resource through the generic read API resource registrar."
     },
     {
       "operation": {
@@ -774,8 +938,12 @@
         "summary": "Delete a Service"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_delete_service",
+      "grantPermission": "tool:tailscale_delete_service",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "destructive": true,
+      "confirmation": "deleteService"
     },
     {
       "operation": {
@@ -786,8 +954,10 @@
         "summary": "Get a Service"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_get_service",
+      "grantPermission": "tool:tailscale_get_service",
+      "status": "implemented",
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
     },
     {
       "operation": {
@@ -798,8 +968,11 @@
         "summary": "Update a Service"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_update_service",
+      "grantPermission": "tool:tailscale_update_service",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "updateService"
     },
     {
       "operation": {
@@ -810,8 +983,10 @@
         "summary": "Get approval status of Service on a device"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_get_service_device_approval",
+      "grantPermission": "tool:tailscale_get_service_device_approval",
+      "status": "implemented",
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
     },
     {
       "operation": {
@@ -822,8 +997,11 @@
         "summary": "Update approval status of Service on a device"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_update_service_device_approval",
+      "grantPermission": "tool:tailscale_update_service_device_approval",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "updateServiceDeviceApproval"
     },
     {
       "operation": {
@@ -834,8 +1012,10 @@
         "summary": "List devices hosting a Service"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_list_service_hosts",
+      "grantPermission": "tool:tailscale_list_service_hosts",
+      "status": "implemented",
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
     },
     {
       "operation": {
@@ -860,8 +1040,11 @@
         "summary": "Update tailnet settings"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_update_tailnet_settings",
+      "grantPermission": "tool:tailscale_update_tailnet_settings",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "updateTailnetSettings"
     },
     {
       "operation": {
@@ -871,9 +1054,11 @@
         "domain": "UserInvites",
         "summary": "List user invites"
       },
-      "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mappingType": "resource",
+      "resourceUri": "tailscale://user-invites",
+      "grantPermission": "resource:tailscale://user-invites",
+      "status": "implemented",
+      "rationale": "Stable tailnet state is exposed as an MCP JSON resource through the generic read API resource registrar."
     },
     {
       "operation": {
@@ -884,8 +1069,11 @@
         "summary": "Create user invites"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_create_user_invites",
+      "grantPermission": "tool:tailscale_create_user_invites",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "createUserInvites"
     },
     {
       "operation": {
@@ -896,8 +1084,12 @@
         "summary": "Delete a user invite"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_delete_user_invite",
+      "grantPermission": "tool:tailscale_delete_user_invite",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "destructive": true,
+      "confirmation": "deleteUserInvite"
     },
     {
       "operation": {
@@ -908,8 +1100,10 @@
         "summary": "Get a user invite"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_get_user_invite",
+      "grantPermission": "tool:tailscale_get_user_invite",
+      "status": "implemented",
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
     },
     {
       "operation": {
@@ -920,8 +1114,11 @@
         "summary": "Resend a user invite"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_resend_user_invite",
+      "grantPermission": "tool:tailscale_resend_user_invite",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "resendUserInvite"
     },
     {
       "operation": {
@@ -932,8 +1129,10 @@
         "summary": "List users"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_list_users",
+      "grantPermission": "tool:tailscale_list_users",
+      "status": "implemented",
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
     },
     {
       "operation": {
@@ -944,8 +1143,10 @@
         "summary": "Get a user"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_get_user",
+      "grantPermission": "tool:tailscale_get_user",
+      "status": "implemented",
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
     },
     {
       "operation": {
@@ -956,8 +1157,11 @@
         "summary": "Approve a user"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_approve_user",
+      "grantPermission": "tool:tailscale_approve_user",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "approveUser"
     },
     {
       "operation": {
@@ -968,8 +1172,12 @@
         "summary": "Delete a user"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_delete_user",
+      "grantPermission": "tool:tailscale_delete_user",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "destructive": true,
+      "confirmation": "deleteUser"
     },
     {
       "operation": {
@@ -980,8 +1188,11 @@
         "summary": "Restore a user"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_restore_user",
+      "grantPermission": "tool:tailscale_restore_user",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "restoreUser"
     },
     {
       "operation": {
@@ -992,8 +1203,11 @@
         "summary": "Update user role"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_update_user_role",
+      "grantPermission": "tool:tailscale_update_user_role",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "updateUserRole"
     },
     {
       "operation": {
@@ -1004,8 +1218,11 @@
         "summary": "Suspend a user"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_suspend_user",
+      "grantPermission": "tool:tailscale_suspend_user",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "suspendUser"
     },
     {
       "operation": {
@@ -1015,9 +1232,11 @@
         "domain": "Webhooks",
         "summary": "List webhooks"
       },
-      "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mappingType": "resource",
+      "resourceUri": "tailscale://webhooks",
+      "grantPermission": "resource:tailscale://webhooks",
+      "status": "implemented",
+      "rationale": "Stable tailnet state is exposed as an MCP JSON resource through the generic read API resource registrar."
     },
     {
       "operation": {
@@ -1028,8 +1247,11 @@
         "summary": "Create a webhook"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_create_webhook",
+      "grantPermission": "tool:tailscale_create_webhook",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "createWebhook"
     },
     {
       "operation": {
@@ -1040,8 +1262,12 @@
         "summary": "Delete webhook"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_delete_webhook",
+      "grantPermission": "tool:tailscale_delete_webhook",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "destructive": true,
+      "confirmation": "deleteWebhook"
     },
     {
       "operation": {
@@ -1052,8 +1278,10 @@
         "summary": "Get webhook"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_get_webhook",
+      "grantPermission": "tool:tailscale_get_webhook",
+      "status": "implemented",
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
     },
     {
       "operation": {
@@ -1064,8 +1292,11 @@
         "summary": "Update webhook"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_update_webhook",
+      "grantPermission": "tool:tailscale_update_webhook",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "updateWebhook"
     },
     {
       "operation": {
@@ -1076,8 +1307,11 @@
         "summary": "Rotate webhook secret"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_rotate_webhook_secret",
+      "grantPermission": "tool:tailscale_rotate_webhook_secret",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "rotateWebhookSecret"
     },
     {
       "operation": {
@@ -1088,14 +1322,17 @@
         "summary": "Test a webhook"
       },
       "mappingType": "tool",
-      "status": "gap",
-      "rationale": "No MCP mapping implemented yet."
+      "mcpName": "tailscale_test_webhook",
+      "grantPermission": "tool:tailscale_test_webhook",
+      "status": "implemented",
+      "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "confirmation": "testWebhook"
     }
   ],
   "summary": {
     "total": 90,
-    "implemented": 4,
-    "gaps": 86,
+    "implemented": 90,
+    "gaps": 0,
     "excluded": 0,
     "planned": 0
   }

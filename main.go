@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/alecthomas/kong"
+	"github.com/jaxxstorm/tailscale-mcp/internal/readapi"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/tailscale/hujson"
@@ -330,266 +331,16 @@ func main() {
 		Tailnet: cli.Tailnet,
 		APIKey:  cli.APIKey,
 	}
+	readAPIClient := readapi.Client{
+		Tailnet: cli.Tailnet,
+		APIKey:  cli.APIKey,
+	}
 
 	mcpServer := server.NewMCPServer("ts-mcp", buildVersion)
 
-	// Add empty prompts support to prevent errors
-	logger.Debug("Adding prompts capability")
-	mcpServer.AddPrompt(mcp.NewPrompt("empty"),
-		func(ctx context.Context, req mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
-			return &mcp.GetPromptResult{
-				Messages: []mcp.PromptMessage{},
-			}, nil
-		})
-
-	// Resource: status
-	mcpServer.AddResource(mcp.NewResource("bootstrap://status", "Health-check",
-		mcp.WithMIMEType("text/plain")),
-		func(ctx context.Context, _ mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-			logger.Debug("Resource requested", zap.String("resource", "bootstrap://status"))
-
-			// Check access
-			if err := checkResourceAccess(ctx, "bootstrap://status"); err != nil {
-				return nil, err
-			}
-
-			return []mcp.ResourceContents{
-				mcp.TextResourceContents{URI: "bootstrap://status", MIMEType: "text/plain", Text: "up"},
-			}, nil
-		})
-
-	devicesResource := mcp.NewResource(
-		"tailscale://devices",
-		"List all devices in the tailnet",
-		mcp.WithMIMEType("application/json"),
-	)
-
-	mcpServer.AddResource(devicesResource, func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-		logger.Debug("Resource requested", zap.String("resource", "tailscale://devices"))
-
-		// Check access
-		if err := checkResourceAccess(ctx, "tailscale://devices"); err != nil {
-			return nil, err
-		}
-
-		devices, err := tsAdminClient.Devices().ListWithAllFields(ctx)
-		if err != nil {
-			logger.Error("Failed to list devices", zap.Error(err))
-			return nil, err
-		}
-
-		data, err := json.MarshalIndent(devices, "", "  ")
-		if err != nil {
-			logger.Error("Failed to marshal devices", zap.Error(err))
-			return nil, err
-		}
-
-		logger.Info("Retrieved devices", zap.Int("count", len(devices)))
-		return []mcp.ResourceContents{
-			mcp.TextResourceContents{
-				URI:      "tailscale://devices",
-				MIMEType: "application/json",
-				Text:     string(data),
-			},
-		}, nil
-	})
-
-	// Resource: policy_file
-	policyResource := mcp.NewResource(
-		"tailscale://policy",
-		"Fetch the current Tailscale policy file (ACL)",
-		mcp.WithMIMEType("application/json"),
-	)
-
-	mcpServer.AddResource(policyResource,
-		func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-			logger.Debug("Resource requested", zap.String("resource", "tailscale://policy"))
-
-			// Check access
-			if err := checkResourceAccess(ctx, "tailscale://policy"); err != nil {
-				return nil, err
-			}
-
-			policy, err := tsAdminClient.PolicyFile().Raw(ctx)
-			if err != nil {
-				logger.Error("Failed to fetch policy file", zap.Error(err))
-				return nil, fmt.Errorf("failed to fetch policy file: %w", err)
-			}
-
-			parsed, err := hujson.Parse([]byte(policy.HuJSON))
-			if err != nil {
-				logger.Error("Failed to parse HuJSON policy file", zap.Error(err))
-				return nil, fmt.Errorf("failed to parse HuJSON policy file: %w", err)
-			}
-			parsed.Standardize()
-
-			var standardizedPolicy interface{}
-			if err := json.Unmarshal(parsed.Pack(), &standardizedPolicy); err != nil {
-				logger.Error("Failed to unmarshal standardized policy JSON", zap.Error(err))
-				return nil, fmt.Errorf("failed to unmarshal standardized policy JSON: %w", err)
-			}
-
-			data, err := json.MarshalIndent(standardizedPolicy, "", "  ")
-			if err != nil {
-				logger.Error("Failed to marshal standardized policy JSON", zap.Error(err))
-				return nil, fmt.Errorf("failed to marshal standardized policy JSON: %w", err)
-			}
-
-			logger.Info("Retrieved policy file")
-			return []mcp.ResourceContents{
-				mcp.TextResourceContents{
-					URI:      "tailscale://policy",
-					MIMEType: "application/json",
-					Text:     string(data),
-				},
-			}, nil
-		})
-
-	// Resource: Tailnet Settings
-	mcpServer.AddResource(mcp.NewResource("tailscale://tailnet-settings", "Tailnet Settings",
-		mcp.WithMIMEType("application/json"),
-	), func(ctx context.Context, _ mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-		logger.Debug("Resource requested", zap.String("resource", "tailscale://tailnet-settings"))
-
-		// Check access
-		if err := checkResourceAccess(ctx, "tailscale://tailnet-settings"); err != nil {
-			return nil, err
-		}
-
-		settings, err := tsAdminClient.TailnetSettings().Get(ctx)
-		if err != nil {
-			logger.Error("Failed to fetch tailnet settings", zap.Error(err))
-			return nil, fmt.Errorf("failed to fetch tailnet settings: %w", err)
-		}
-
-		data, err := json.MarshalIndent(settings, "", "  ")
-		if err != nil {
-			logger.Error("Failed to marshal tailnet settings", zap.Error(err))
-			return nil, fmt.Errorf("failed to marshal tailnet settings: %w", err)
-		}
-
-		logger.Info("Retrieved tailnet settings")
-		return []mcp.ResourceContents{
-			mcp.TextResourceContents{
-				URI:      "tailscale://tailnet-settings",
-				MIMEType: "application/json",
-				Text:     string(data),
-			},
-		}, nil
-	})
-
-	// Resource: device
-	deviceResource := mcp.NewResource(
-		"tailscale://device",
-		"Query device details by ID or hostname",
-		mcp.WithMIMEType("application/json"),
-	)
-	mcpServer.AddResource(deviceResource,
-		func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-			deviceID, ok := req.Params.Arguments["device"].(string)
-			if !ok || deviceID == "" {
-				logger.Error("Device parameter required for tailscale://device")
-				return nil, fmt.Errorf("device parameter required")
-			}
-
-			logger.Debug("Resource requested",
-				zap.String("resource", "tailscale://device"),
-				zap.String("device_id", deviceID),
-			)
-
-			// Check access
-			if err := checkResourceAccess(ctx, "tailscale://device"); err != nil {
-				return nil, err
-			}
-
-			device, err := findDevice(ctx, tsAdminClient, deviceID)
-			if err != nil {
-				logger.Error("Failed to find device", zap.String("device_id", deviceID), zap.Error(err))
-				return nil, err
-			}
-
-			data, err := json.MarshalIndent(device, "", "  ")
-			if err != nil {
-				logger.Error("Failed to marshal device", zap.String("device_id", deviceID), zap.Error(err))
-				return nil, err
-			}
-
-			logger.Info("Retrieved device", zap.String("device_id", deviceID))
-			return []mcp.ResourceContents{
-				mcp.TextResourceContents{
-					URI:      fmt.Sprintf("tailscale://device/%s", deviceID),
-					MIMEType: "application/json",
-					Text:     string(data),
-				},
-			}, nil
-		})
-
-	// Tool wrapper for resource
-	mcpServer.AddTool(mcp.NewTool("get_device_info",
-		mcp.WithDescription("Fetch device details by ID, IP, or hostname"),
-		mcp.WithString("device", mcp.Required(), mcp.Description("Device ID, IP, or hostname")),
-	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		logger.Debug("Tool called", zap.String("tool", "get_device_info"))
-
-		// Check access
-		if err := checkToolAccess(ctx, "get_device_info"); err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-
-		args, ok := req.Params.Arguments.(map[string]any)
-		if !ok {
-			logger.Error("Invalid arguments format for get_device_info")
-			return mcp.NewToolResultError("invalid arguments format"), nil
-		}
-		deviceID := args["device"].(string)
-		logger.Debug("Tool parameters", zap.String("device_id", deviceID))
-
-		device, err := findDevice(ctx, tsAdminClient, deviceID)
-		if err != nil {
-			logger.Error("Device lookup failed", zap.String("device_id", deviceID), zap.Error(err))
-			return mcp.NewToolResultErrorFromErr("Device lookup failed", err), nil
-		}
-		data, err := json.MarshalIndent(device, "", "  ")
-		if err != nil {
-			logger.Error("JSON marshal failed", zap.String("device_id", deviceID), zap.Error(err))
-			return mcp.NewToolResultErrorFromErr("JSON marshal failed", err), nil
-		}
-		logger.Info("Tool executed successfully",
-			zap.String("tool", "get_device_info"),
-			zap.String("device_id", deviceID),
-		)
-		return mcp.NewToolResultText(string(data)), nil
-	})
-
-	// Tool: list_all_devices
-	mcpServer.AddTool(mcp.NewTool("list_all_devices",
-		mcp.WithDescription("List all devices in the tailnet"),
-	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		logger.Debug("Tool called", zap.String("tool", "list_all_devices"))
-
-		// Check access
-		if err := checkToolAccess(ctx, "list_all_devices"); err != nil {
-			return mcp.NewToolResultText(err.Error()), nil
-		}
-
-		devices, err := tsAdminClient.Devices().List(ctx)
-		if err != nil {
-			logger.Error("Failed to list devices", zap.Error(err))
-			return mcp.NewToolResultErrorFromErr("Failed to list devices", err), nil
-		}
-
-		data, err := json.MarshalIndent(devices, "", "  ")
-		if err != nil {
-			logger.Error("JSON marshal failed", zap.Error(err))
-			return mcp.NewToolResultErrorFromErr("JSON marshal failed", err), nil
-		}
-
-		logger.Info("Tool executed successfully",
-			zap.String("tool", "list_all_devices"),
-			zap.Int("device_count", len(devices)),
-		)
-		return mcp.NewToolResultText(string(data)), nil
-	})
+	registerCoreMCP(mcpServer, tsAdminClient)
+	readapi.RegisterTools(mcpServer, readAPIClient, checkToolAccess)
+	readapi.RegisterResources(mcpServer, readAPIClient, checkResourceAccess)
 
 	// stdio mode
 	if cli.Stdio {
@@ -647,6 +398,181 @@ func main() {
 	if err := http.Serve(tsLn, handlerWithMiddleware); err != nil {
 		logger.Fatal("Tailscale server error", zap.Error(err))
 	}
+}
+
+func registerCoreMCP(mcpServer *server.MCPServer, tsAdminClient *tsapi.Client) {
+	logger.Debug("Adding prompts capability")
+	mcpServer.AddPrompt(mcp.NewPrompt("empty"),
+		func(ctx context.Context, req mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+			return &mcp.GetPromptResult{Messages: []mcp.PromptMessage{}}, nil
+		})
+
+	mcpServer.AddResource(mcp.NewResource("bootstrap://status", "Health-check", mcp.WithMIMEType("text/plain")),
+		func(ctx context.Context, _ mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+			logger.Debug("Resource requested", zap.String("resource", "bootstrap://status"))
+			if err := checkResourceAccess(ctx, "bootstrap://status"); err != nil {
+				return nil, err
+			}
+			return []mcp.ResourceContents{mcp.TextResourceContents{URI: "bootstrap://status", MIMEType: "text/plain", Text: "up"}}, nil
+		})
+
+	mcpServer.AddResource(mcp.NewResource("tailscale://devices", "List all devices in the tailnet", mcp.WithMIMEType("application/json")),
+		func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+			logger.Debug("Resource requested", zap.String("resource", "tailscale://devices"))
+			if err := checkResourceAccess(ctx, "tailscale://devices"); err != nil {
+				return nil, err
+			}
+
+			devices, err := tsAdminClient.Devices().ListWithAllFields(ctx)
+			if err != nil {
+				logger.Error("Failed to list devices", zap.Error(err))
+				return nil, err
+			}
+			data, err := json.MarshalIndent(devices, "", "  ")
+			if err != nil {
+				logger.Error("Failed to marshal devices", zap.Error(err))
+				return nil, err
+			}
+
+			logger.Info("Retrieved devices", zap.Int("count", len(devices)))
+			return []mcp.ResourceContents{mcp.TextResourceContents{URI: "tailscale://devices", MIMEType: "application/json", Text: string(data)}}, nil
+		})
+
+	mcpServer.AddResource(mcp.NewResource("tailscale://policy", "Fetch the current Tailscale policy file (ACL)", mcp.WithMIMEType("application/json")),
+		func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+			logger.Debug("Resource requested", zap.String("resource", "tailscale://policy"))
+			if err := checkResourceAccess(ctx, "tailscale://policy"); err != nil {
+				return nil, err
+			}
+
+			policy, err := tsAdminClient.PolicyFile().Raw(ctx)
+			if err != nil {
+				logger.Error("Failed to fetch policy file", zap.Error(err))
+				return nil, fmt.Errorf("failed to fetch policy file: %w", err)
+			}
+			parsed, err := hujson.Parse([]byte(policy.HuJSON))
+			if err != nil {
+				logger.Error("Failed to parse HuJSON policy file", zap.Error(err))
+				return nil, fmt.Errorf("failed to parse HuJSON policy file: %w", err)
+			}
+			parsed.Standardize()
+
+			var standardizedPolicy interface{}
+			if err := json.Unmarshal(parsed.Pack(), &standardizedPolicy); err != nil {
+				logger.Error("Failed to unmarshal standardized policy JSON", zap.Error(err))
+				return nil, fmt.Errorf("failed to unmarshal standardized policy JSON: %w", err)
+			}
+			data, err := json.MarshalIndent(standardizedPolicy, "", "  ")
+			if err != nil {
+				logger.Error("Failed to marshal standardized policy JSON", zap.Error(err))
+				return nil, fmt.Errorf("failed to marshal standardized policy JSON: %w", err)
+			}
+
+			logger.Info("Retrieved policy file")
+			return []mcp.ResourceContents{mcp.TextResourceContents{URI: "tailscale://policy", MIMEType: "application/json", Text: string(data)}}, nil
+		})
+
+	mcpServer.AddResource(mcp.NewResource("tailscale://tailnet-settings", "Tailnet Settings", mcp.WithMIMEType("application/json")),
+		func(ctx context.Context, _ mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+			logger.Debug("Resource requested", zap.String("resource", "tailscale://tailnet-settings"))
+			if err := checkResourceAccess(ctx, "tailscale://tailnet-settings"); err != nil {
+				return nil, err
+			}
+
+			settings, err := tsAdminClient.TailnetSettings().Get(ctx)
+			if err != nil {
+				logger.Error("Failed to fetch tailnet settings", zap.Error(err))
+				return nil, fmt.Errorf("failed to fetch tailnet settings: %w", err)
+			}
+			data, err := json.MarshalIndent(settings, "", "  ")
+			if err != nil {
+				logger.Error("Failed to marshal tailnet settings", zap.Error(err))
+				return nil, fmt.Errorf("failed to marshal tailnet settings: %w", err)
+			}
+
+			logger.Info("Retrieved tailnet settings")
+			return []mcp.ResourceContents{mcp.TextResourceContents{URI: "tailscale://tailnet-settings", MIMEType: "application/json", Text: string(data)}}, nil
+		})
+
+	mcpServer.AddResource(mcp.NewResource("tailscale://device", "Query device details by ID or hostname", mcp.WithMIMEType("application/json")),
+		func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+			deviceID, ok := req.Params.Arguments["device"].(string)
+			if !ok || deviceID == "" {
+				logger.Error("Device parameter required for tailscale://device")
+				return nil, fmt.Errorf("device parameter required")
+			}
+			logger.Debug("Resource requested", zap.String("resource", "tailscale://device"), zap.String("device_id", deviceID))
+
+			if err := checkResourceAccess(ctx, "tailscale://device"); err != nil {
+				return nil, err
+			}
+			device, err := findDevice(ctx, tsAdminClient, deviceID)
+			if err != nil {
+				logger.Error("Failed to find device", zap.String("device_id", deviceID), zap.Error(err))
+				return nil, err
+			}
+			data, err := json.MarshalIndent(device, "", "  ")
+			if err != nil {
+				logger.Error("Failed to marshal device", zap.String("device_id", deviceID), zap.Error(err))
+				return nil, err
+			}
+
+			logger.Info("Retrieved device", zap.String("device_id", deviceID))
+			return []mcp.ResourceContents{mcp.TextResourceContents{URI: fmt.Sprintf("tailscale://device/%s", deviceID), MIMEType: "application/json", Text: string(data)}}, nil
+		})
+
+	mcpServer.AddTool(mcp.NewTool("get_device_info",
+		mcp.WithDescription("Fetch device details by ID, IP, or hostname"),
+		mcp.WithString("device", mcp.Required(), mcp.Description("Device ID, IP, or hostname")),
+	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		logger.Debug("Tool called", zap.String("tool", "get_device_info"))
+		if err := checkToolAccess(ctx, "get_device_info"); err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
+		args, ok := req.Params.Arguments.(map[string]any)
+		if !ok {
+			logger.Error("Invalid arguments format for get_device_info")
+			return mcp.NewToolResultError("invalid arguments format"), nil
+		}
+		deviceID := args["device"].(string)
+		logger.Debug("Tool parameters", zap.String("device_id", deviceID))
+
+		device, err := findDevice(ctx, tsAdminClient, deviceID)
+		if err != nil {
+			logger.Error("Device lookup failed", zap.String("device_id", deviceID), zap.Error(err))
+			return mcp.NewToolResultErrorFromErr("Device lookup failed", err), nil
+		}
+		data, err := json.MarshalIndent(device, "", "  ")
+		if err != nil {
+			logger.Error("JSON marshal failed", zap.String("device_id", deviceID), zap.Error(err))
+			return mcp.NewToolResultErrorFromErr("JSON marshal failed", err), nil
+		}
+		logger.Info("Tool executed successfully", zap.String("tool", "get_device_info"), zap.String("device_id", deviceID))
+		return mcp.NewToolResultText(string(data)), nil
+	})
+
+	mcpServer.AddTool(mcp.NewTool("list_all_devices", mcp.WithDescription("List all devices in the tailnet")),
+		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			logger.Debug("Tool called", zap.String("tool", "list_all_devices"))
+			if err := checkToolAccess(ctx, "list_all_devices"); err != nil {
+				return mcp.NewToolResultText(err.Error()), nil
+			}
+
+			devices, err := tsAdminClient.Devices().List(ctx)
+			if err != nil {
+				logger.Error("Failed to list devices", zap.Error(err))
+				return mcp.NewToolResultErrorFromErr("Failed to list devices", err), nil
+			}
+			data, err := json.MarshalIndent(devices, "", "  ")
+			if err != nil {
+				logger.Error("JSON marshal failed", zap.Error(err))
+				return mcp.NewToolResultErrorFromErr("JSON marshal failed", err), nil
+			}
+
+			logger.Info("Tool executed successfully", zap.String("tool", "list_all_devices"), zap.Int("device_count", len(devices)))
+			return mcp.NewToolResultText(string(data)), nil
+		})
 }
 
 // findDevice finds a device by ID, hostname, or IP and fetches detailed information.

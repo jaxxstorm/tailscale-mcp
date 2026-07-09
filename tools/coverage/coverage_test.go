@@ -4,6 +4,8 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+
+	"github.com/jaxxstorm/tailscale-mcp/internal/readapi"
 )
 
 func TestLoadOpenAPIEmitsEachOperationOnce(t *testing.T) {
@@ -54,6 +56,22 @@ func TestMutatingOperationsCannotBeResources(t *testing.T) {
 	err := ValidateMapping(Operation{OperationID: "deleteDevice", Method: "DELETE", Path: "/device/{deviceId}"}, Mapping{OperationID: "deleteDevice", Type: MappingResource})
 	if !errors.Is(err, ErrMutatingResource) {
 		t.Fatalf("expected ErrMutatingResource, got %v", err)
+	}
+}
+
+func TestReadEndpointDefinitionsHaveCoverageMappings(t *testing.T) {
+	mappings := map[string]Mapping{}
+	for _, mapping := range CurrentMappings() {
+		mappings[mapping.OperationID] = mapping
+	}
+	for _, endpoint := range readapi.ToolEndpoints() {
+		mapping, ok := mappings[endpoint.OperationID]
+		if !ok {
+			t.Fatalf("missing coverage mapping for %q", endpoint.OperationID)
+		}
+		if mapping.Name == "" && mapping.URI == "" {
+			t.Fatalf("mapping for %q has no MCP name or URI", endpoint.OperationID)
+		}
 	}
 }
 
