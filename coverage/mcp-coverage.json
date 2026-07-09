@@ -1,0 +1,1102 @@
+{
+  "source": "tools/coverage/tailscale-v2-openapi.yaml",
+  "operations": [
+    {
+      "operation": {
+        "operationId": "getContacts",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/contacts",
+        "domain": "Contacts",
+        "summary": "Get contacts"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "updateContact",
+        "method": "PATCH",
+        "path": "/tailnet/{tailnet}/contacts/{contactType}",
+        "domain": "Contacts",
+        "summary": "Update contact"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "resendContactVerificationEmail",
+        "method": "POST",
+        "path": "/tailnet/{tailnet}/contacts/{contactType}/resend-verification-email",
+        "domain": "Contacts",
+        "summary": "Resend verification email"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "getDnsConfiguration",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/dns/configuration",
+        "domain": "DNS",
+        "summary": "Get DNS configuration"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "setDnsConfiguration",
+        "method": "POST",
+        "path": "/tailnet/{tailnet}/dns/configuration",
+        "domain": "DNS",
+        "summary": "Set DNS configuration"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "listDnsNameservers",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/dns/nameservers",
+        "domain": "DNS",
+        "summary": "List DNS nameservers"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "setDnsNameservers",
+        "method": "POST",
+        "path": "/tailnet/{tailnet}/dns/nameservers",
+        "domain": "DNS",
+        "summary": "Set DNS nameservers"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "getDnsPreferences",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/dns/preferences",
+        "domain": "DNS",
+        "summary": "Get DNS preferences"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "setDnsPreferences",
+        "method": "POST",
+        "path": "/tailnet/{tailnet}/dns/preferences",
+        "domain": "DNS",
+        "summary": "Set DNS preferences"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "listDnsSearchPaths",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/dns/searchpaths",
+        "domain": "DNS",
+        "summary": "List DNS search paths"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "setDnsSearchPaths",
+        "method": "POST",
+        "path": "/tailnet/{tailnet}/dns/searchpaths",
+        "domain": "DNS",
+        "summary": "Set DNS search paths"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "getSplitDns",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/dns/split-dns",
+        "domain": "DNS",
+        "summary": "Get split DNS"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "updateSplitDns",
+        "method": "PATCH",
+        "path": "/tailnet/{tailnet}/dns/split-dns",
+        "domain": "DNS",
+        "summary": "Update split DNS"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "setSplitDns",
+        "method": "PUT",
+        "path": "/tailnet/{tailnet}/dns/split-dns",
+        "domain": "DNS",
+        "summary": "Set split DNS"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "acceptDeviceInvite",
+        "method": "POST",
+        "path": "/device-invites/-/accept",
+        "domain": "DeviceInvites",
+        "summary": "Accept a device invite"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "deleteDeviceInvite",
+        "method": "DELETE",
+        "path": "/device-invites/{deviceInviteId}",
+        "domain": "DeviceInvites",
+        "summary": "Delete a device invite"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "getDeviceInvite",
+        "method": "GET",
+        "path": "/device-invites/{deviceInviteId}",
+        "domain": "DeviceInvites",
+        "summary": "Get a device invite"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "resendDeviceInvite",
+        "method": "POST",
+        "path": "/device-invites/{deviceInviteId}/resend",
+        "domain": "DeviceInvites",
+        "summary": "Resend a device invite"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "listDeviceInvites",
+        "method": "GET",
+        "path": "/device/{deviceId}/device-invites",
+        "domain": "DeviceInvites",
+        "summary": "List device invites"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "createDeviceInvites",
+        "method": "POST",
+        "path": "/device/{deviceId}/device-invites",
+        "domain": "DeviceInvites",
+        "summary": "Create device invites"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "deletePostureIntegration",
+        "method": "DELETE",
+        "path": "/posture/integrations/{id}",
+        "domain": "DevicePosture",
+        "summary": "Delete a posture integration"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "getPostureIntegration",
+        "method": "GET",
+        "path": "/posture/integrations/{id}",
+        "domain": "DevicePosture",
+        "summary": "Get a posture integration"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "updatePostureIntegration",
+        "method": "PATCH",
+        "path": "/posture/integrations/{id}",
+        "domain": "DevicePosture",
+        "summary": "Update a posture integration"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "getPostureIntegrations",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/posture/integrations",
+        "domain": "DevicePosture",
+        "summary": "List all posture integrations"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "createPostureIntegration",
+        "method": "POST",
+        "path": "/tailnet/{tailnet}/posture/integrations",
+        "domain": "DevicePosture",
+        "summary": "Create a posture integration"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "deleteDevice",
+        "method": "DELETE",
+        "path": "/device/{deviceId}",
+        "domain": "Devices",
+        "summary": "Delete a device"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "getDevice",
+        "method": "GET",
+        "path": "/device/{deviceId}",
+        "domain": "Devices",
+        "summary": "Get a device"
+      },
+      "mappingType": "tool",
+      "mcpName": "get_device_info",
+      "resourceUri": "tailscale://device/{device}",
+      "grantPermission": "tool:get_device_info",
+      "status": "implemented",
+      "rationale": "Parameterized device lookup by ID, hostname, or IP is exposed as a typed tool with a matching resource shape."
+    },
+    {
+      "operation": {
+        "operationId": "getDevicePostureAttributes",
+        "method": "GET",
+        "path": "/device/{deviceId}/attributes",
+        "domain": "Devices",
+        "summary": "Get device posture attributes"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "deleteCustomDevicePostureAttributes",
+        "method": "DELETE",
+        "path": "/device/{deviceId}/attributes/{attributeKey}",
+        "domain": "Devices",
+        "summary": "Delete custom device posture attributes"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "setCustomDevicePostureAttributes",
+        "method": "POST",
+        "path": "/device/{deviceId}/attributes/{attributeKey}",
+        "domain": "Devices",
+        "summary": "Set custom device posture attributes"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "authorizeDevice",
+        "method": "POST",
+        "path": "/device/{deviceId}/authorized",
+        "domain": "Devices",
+        "summary": "Authorize device"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "expireDeviceKey",
+        "method": "POST",
+        "path": "/device/{deviceId}/expire",
+        "domain": "Devices",
+        "summary": "Expire a device's key"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "setDeviceIp",
+        "method": "POST",
+        "path": "/device/{deviceId}/ip",
+        "domain": "Devices",
+        "summary": "Set device IPv4 address"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "updateDeviceKey",
+        "method": "POST",
+        "path": "/device/{deviceId}/key",
+        "domain": "Devices",
+        "summary": "Update device key"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "setDeviceName",
+        "method": "POST",
+        "path": "/device/{deviceId}/name",
+        "domain": "Devices",
+        "summary": "Set device name"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "listDeviceRoutes",
+        "method": "GET",
+        "path": "/device/{deviceId}/routes",
+        "domain": "Devices",
+        "summary": "List device routes"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "setDeviceRoutes",
+        "method": "POST",
+        "path": "/device/{deviceId}/routes",
+        "domain": "Devices",
+        "summary": "Set device routes"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "setDeviceTags",
+        "method": "POST",
+        "path": "/device/{deviceId}/tags",
+        "domain": "Devices",
+        "summary": "Set device tags"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "batchUpdateCustomDevicePostureAttributes",
+        "method": "PATCH",
+        "path": "/tailnet/{tailnet}/device-attributes",
+        "domain": "Devices",
+        "summary": "Batch update custom device posture attributes"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "listTailnetDevices",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/devices",
+        "domain": "Devices",
+        "summary": "List tailnet devices"
+      },
+      "mappingType": "tool",
+      "mcpName": "list_all_devices",
+      "resourceUri": "tailscale://devices",
+      "grantPermission": "tool:list_all_devices",
+      "status": "implemented",
+      "rationale": "Device collection is exposed as both a Claude-compatible tool and a stable resource."
+    },
+    {
+      "operation": {
+        "operationId": "listTailnetKeys",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/keys",
+        "domain": "Keys",
+        "summary": "List tailnet keys"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "createKey",
+        "method": "POST",
+        "path": "/tailnet/{tailnet}/keys",
+        "domain": "Keys",
+        "summary": "Create an auth key or trust credential"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "deleteKey",
+        "method": "DELETE",
+        "path": "/tailnet/{tailnet}/keys/{keyId}",
+        "domain": "Keys",
+        "summary": "Delete key"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "getKey",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/keys/{keyId}",
+        "domain": "Keys",
+        "summary": "Get key"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "setKey",
+        "method": "PUT",
+        "path": "/tailnet/{tailnet}/keys/{keyId}",
+        "domain": "Keys",
+        "summary": "Set key"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "getAwsExternalId",
+        "method": "POST",
+        "path": "/tailnet/{tailnet}/aws-external-id",
+        "domain": "Logging",
+        "summary": "Create or get AWS external id"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "validateAwsExternalId",
+        "method": "POST",
+        "path": "/tailnet/{tailnet}/aws-external-id/{id}/validate-aws-trust-policy",
+        "domain": "Logging",
+        "summary": "Validate external ID integration with IAM role trust policy"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "listConfigurationAuditLogs",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/logging/configuration",
+        "domain": "Logging",
+        "summary": "List configuration audit logs"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "listNetworkFlowLogs",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/logging/network",
+        "domain": "Logging",
+        "summary": "List network flow logs"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "disableLogStreaming",
+        "method": "DELETE",
+        "path": "/tailnet/{tailnet}/logging/{logType}/stream",
+        "domain": "Logging",
+        "summary": "Disable log streaming"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "getLogStreamingConfiguration",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/logging/{logType}/stream",
+        "domain": "Logging",
+        "summary": "Get log streaming configuration"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "setLogStreamingConfiguration",
+        "method": "PUT",
+        "path": "/tailnet/{tailnet}/logging/{logType}/stream",
+        "domain": "Logging",
+        "summary": "Set log streaming configuration"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "getLogStreamingStatus",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/logging/{logType}/stream/status",
+        "domain": "Logging",
+        "summary": "Get log streaming status"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "listOAuthApps",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/oauth-apps",
+        "domain": "OAuthApps",
+        "summary": "List OAuth apps"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "createOAuthApp",
+        "method": "POST",
+        "path": "/tailnet/{tailnet}/oauth-apps",
+        "domain": "OAuthApps",
+        "summary": "Create an OAuth app"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "deleteOAuthApp",
+        "method": "DELETE",
+        "path": "/tailnet/{tailnet}/oauth-apps/{appId}",
+        "domain": "OAuthApps",
+        "summary": "Delete OAuth app"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "getOAuthApp",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/oauth-apps/{appId}",
+        "domain": "OAuthApps",
+        "summary": "Get OAuth app"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "updateOAuthApp",
+        "method": "PUT",
+        "path": "/tailnet/{tailnet}/oauth-apps/{appId}",
+        "domain": "OAuthApps",
+        "summary": "Update OAuth app"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "getPolicyFile",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/acl",
+        "domain": "PolicyFile",
+        "summary": "Get policy file"
+      },
+      "mappingType": "resource",
+      "resourceUri": "tailscale://policy",
+      "grantPermission": "resource:tailscale://policy",
+      "status": "implemented",
+      "rationale": "Policy file is stable tailnet state exposed as JSON."
+    },
+    {
+      "operation": {
+        "operationId": "setPolicyFile",
+        "method": "POST",
+        "path": "/tailnet/{tailnet}/acl",
+        "domain": "PolicyFile",
+        "summary": "Set policy file"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "previewRuleMatches",
+        "method": "POST",
+        "path": "/tailnet/{tailnet}/acl/preview",
+        "domain": "PolicyFile",
+        "summary": "Preview rule matches"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "validateAndTestPolicyFile",
+        "method": "POST",
+        "path": "/tailnet/{tailnet}/acl/validate",
+        "domain": "PolicyFile",
+        "summary": "Validate and test policy file"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "listServices",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/services",
+        "domain": "Services",
+        "summary": "List all Services"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "deleteService",
+        "method": "DELETE",
+        "path": "/tailnet/{tailnet}/services/{serviceName}",
+        "domain": "Services",
+        "summary": "Delete a Service"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "getService",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/services/{serviceName}",
+        "domain": "Services",
+        "summary": "Get a Service"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "updateService",
+        "method": "PUT",
+        "path": "/tailnet/{tailnet}/services/{serviceName}",
+        "domain": "Services",
+        "summary": "Update a Service"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "getServiceDeviceApproval",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/services/{serviceName}/device/{deviceId}/approved",
+        "domain": "Services",
+        "summary": "Get approval status of Service on a device"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "updateServiceDeviceApproval",
+        "method": "POST",
+        "path": "/tailnet/{tailnet}/services/{serviceName}/device/{deviceId}/approved",
+        "domain": "Services",
+        "summary": "Update approval status of Service on a device"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "listServiceHosts",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/services/{serviceName}/devices",
+        "domain": "Services",
+        "summary": "List devices hosting a Service"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "getTailnetSettings",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/settings",
+        "domain": "TailnetSettings",
+        "summary": "Get tailnet settings"
+      },
+      "mappingType": "resource",
+      "resourceUri": "tailscale://tailnet-settings",
+      "grantPermission": "resource:tailscale://tailnet-settings",
+      "status": "implemented",
+      "rationale": "Tailnet settings are stable tailnet state exposed as JSON."
+    },
+    {
+      "operation": {
+        "operationId": "updateTailnetSettings",
+        "method": "PATCH",
+        "path": "/tailnet/{tailnet}/settings",
+        "domain": "TailnetSettings",
+        "summary": "Update tailnet settings"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "listUserInvites",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/user-invites",
+        "domain": "UserInvites",
+        "summary": "List user invites"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "createUserInvites",
+        "method": "POST",
+        "path": "/tailnet/{tailnet}/user-invites",
+        "domain": "UserInvites",
+        "summary": "Create user invites"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "deleteUserInvite",
+        "method": "DELETE",
+        "path": "/user-invites/{userInviteId}",
+        "domain": "UserInvites",
+        "summary": "Delete a user invite"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "getUserInvite",
+        "method": "GET",
+        "path": "/user-invites/{userInviteId}",
+        "domain": "UserInvites",
+        "summary": "Get a user invite"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "resendUserInvite",
+        "method": "POST",
+        "path": "/user-invites/{userInviteId}/resend",
+        "domain": "UserInvites",
+        "summary": "Resend a user invite"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "listUsers",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/users",
+        "domain": "Users",
+        "summary": "List users"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "getUser",
+        "method": "GET",
+        "path": "/users/{userId}",
+        "domain": "Users",
+        "summary": "Get a user"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "approveUser",
+        "method": "POST",
+        "path": "/users/{userId}/approve",
+        "domain": "Users",
+        "summary": "Approve a user"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "deleteUser",
+        "method": "POST",
+        "path": "/users/{userId}/delete",
+        "domain": "Users",
+        "summary": "Delete a user"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "restoreUser",
+        "method": "POST",
+        "path": "/users/{userId}/restore",
+        "domain": "Users",
+        "summary": "Restore a user"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "updateUserRole",
+        "method": "POST",
+        "path": "/users/{userId}/role",
+        "domain": "Users",
+        "summary": "Update user role"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "suspendUser",
+        "method": "POST",
+        "path": "/users/{userId}/suspend",
+        "domain": "Users",
+        "summary": "Suspend a user"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "listWebhooks",
+        "method": "GET",
+        "path": "/tailnet/{tailnet}/webhooks",
+        "domain": "Webhooks",
+        "summary": "List webhooks"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "createWebhook",
+        "method": "POST",
+        "path": "/tailnet/{tailnet}/webhooks",
+        "domain": "Webhooks",
+        "summary": "Create a webhook"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "deleteWebhook",
+        "method": "DELETE",
+        "path": "/webhooks/{endpointId}",
+        "domain": "Webhooks",
+        "summary": "Delete webhook"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "getWebhook",
+        "method": "GET",
+        "path": "/webhooks/{endpointId}",
+        "domain": "Webhooks",
+        "summary": "Get webhook"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "updateWebhook",
+        "method": "PATCH",
+        "path": "/webhooks/{endpointId}",
+        "domain": "Webhooks",
+        "summary": "Update webhook"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "rotateWebhookSecret",
+        "method": "POST",
+        "path": "/webhooks/{endpointId}/rotate",
+        "domain": "Webhooks",
+        "summary": "Rotate webhook secret"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    },
+    {
+      "operation": {
+        "operationId": "testWebhook",
+        "method": "POST",
+        "path": "/webhooks/{endpointId}/test",
+        "domain": "Webhooks",
+        "summary": "Test a webhook"
+      },
+      "mappingType": "tool",
+      "status": "gap",
+      "rationale": "No MCP mapping implemented yet."
+    }
+  ],
+  "summary": {
+    "total": 90,
+    "implemented": 4,
+    "gaps": 86,
+    "excluded": 0,
+    "planned": 0
+  }
+}

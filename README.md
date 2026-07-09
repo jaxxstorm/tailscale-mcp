@@ -225,6 +225,24 @@ Claude will now recognize your MCP server and you can interact with your Tailsca
 
 **Note**: Tools are preferred for Claude Desktop as they provide better compatibility and error handling.
 
+## API Coverage
+
+Full Tailscale API parity is tracked with repository tooling under `tools/coverage/`. The tooling maps each Tailscale OpenAPI operation to an MCP tool, resource, prompt workflow, or reviewed exclusion, then writes generated reports under `coverage/`.
+
+Refresh the vendored Tailscale OpenAPI snapshot with:
+
+```bash
+make openapi-refresh
+```
+
+Run coverage generation with:
+
+```bash
+make coverage
+```
+
+Review `coverage/mcp-coverage.md` for current MCP coverage and `coverage/parity-backlog.md` for unimplemented API operations.
+
 ## Example Claude Desktop Queries
 
 ### Get Device Information

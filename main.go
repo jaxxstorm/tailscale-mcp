@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -214,13 +215,13 @@ func checkToolAccess(ctx context.Context, toolName string) error {
 	if err != nil {
 		logger.Error("Failed to get capabilities", zap.Error(err))
 		errorJSON := createPermissionErrorJSON(user, toolName, "tool", []string{})
-		return fmt.Errorf(errorJSON)
+		return errors.New(errorJSON)
 	}
 
 	if caps == nil {
 		logger.Warn("No MCP capabilities found", zap.String("user", user))
 		errorJSON := createPermissionErrorJSON(user, toolName, "tool", []string{})
-		return fmt.Errorf(errorJSON)
+		return errors.New(errorJSON)
 	}
 
 	// Check if user has access to this specific tool
@@ -240,7 +241,7 @@ func checkToolAccess(ctx context.Context, toolName string) error {
 		zap.Strings("allowed_tools", caps.Tools),
 	)
 	errorJSON := createPermissionErrorJSON(user, toolName, "tool", caps.Tools)
-	return fmt.Errorf(errorJSON)
+	return errors.New(errorJSON)
 }
 
 // checkResourceAccess validates if the user has access to a specific resource
@@ -249,13 +250,13 @@ func checkResourceAccess(ctx context.Context, resourceURI string) error {
 	if err != nil {
 		logger.Error("Failed to get capabilities", zap.Error(err))
 		errorJSON := createPermissionErrorJSON(user, resourceURI, "resource", []string{})
-		return fmt.Errorf(errorJSON)
+		return errors.New(errorJSON)
 	}
 
 	if caps == nil {
 		logger.Warn("No MCP capabilities found", zap.String("user", user))
 		errorJSON := createPermissionErrorJSON(user, resourceURI, "resource", []string{})
-		return fmt.Errorf(errorJSON)
+		return errors.New(errorJSON)
 	}
 
 	// Check if user has access to this specific resource
@@ -275,7 +276,7 @@ func checkResourceAccess(ctx context.Context, resourceURI string) error {
 		zap.Strings("allowed_resources", caps.Resources),
 	)
 	errorJSON := createPermissionErrorJSON(user, resourceURI, "resource", caps.Resources)
-	return fmt.Errorf(errorJSON)
+	return errors.New(errorJSON)
 }
 
 // loggingMiddleware logs all incoming requests

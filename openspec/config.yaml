@@ -1,0 +1,60 @@
+schema: spec-driven
+
+context: |
+  Project: tailscale-mcp
+
+  This project is a Go MCP server for Tailscale operators. It exposes the
+  Tailscale Admin API through Model Context Protocol tools, resources, and
+  other MCP primitives where relevant so LLM clients can inspect and operate a
+  tailnet safely.
+
+  Runtime and transport:
+  - Written in Go.
+  - Uses github.com/mark3labs/mcp-go for MCP server primitives.
+  - Uses tailscale.com/client/tailscale/v2 for the Tailscale Admin API.
+  - Starts a tailscale.com/tsnet server for HTTP MCP access over a tailnet.
+  - Also supports stdio mode for local LLM clients such as Claude Desktop.
+
+  Security model:
+  - Fine-grained access is enforced through Tailscale ACL grants.
+  - MCP permissions are represented with the custom capability
+    jaxxstorm.com/cap/mcp.
+  - Every tool, resource, prompt, or other exposed operation must have a clear
+    grant-controlled permission name before it can access Tailscale data or
+    perform an API mutation.
+  - Prefer least-privilege permission names aligned to the underlying Tailscale
+    OpenAPI operation.
+
+  Product goal:
+  - Cover the complete Tailscale OpenAPI surface as MCP capabilities.
+  - Expose API reads as tools and/or resources based on MCP ergonomics.
+  - Expose API writes and operational actions as explicit tools with typed
+    inputs, clear descriptions, and safe error handling.
+  - Add prompts only when they encode useful operator workflows rather than raw
+    API access.
+  - Keep API coverage discoverable so operators can understand which Tailscale
+    endpoints are implemented and which grant permissions are required.
+
+  Implementation expectations:
+  - Keep changes small and idiomatic Go.
+  - Prefer generated or systematic mappings when adding broad OpenAPI coverage,
+    but keep authorization and error handling explicit and auditable.
+  - Preserve existing stdio and tsnet HTTP behavior.
+  - Return structured JSON for Tailscale API data where practical.
+  - Do not bypass grant checks for convenience.
+
+rules:
+  proposal:
+    - "State which Tailscale OpenAPI areas or endpoints are in scope."
+    - "Include the MCP shape for each area: tools, resources, prompts, or none."
+    - "Include authorization and grant-name impacts for operator access control."
+    - "Call out read-only versus mutating operations explicitly."
+  design:
+    - "Describe how endpoint coverage remains complete and discoverable."
+    - "Define naming conventions for MCP tools/resources and grant permissions."
+    - "Address pagination, filtering, partial failures, and API error mapping."
+    - "Describe how mutating operations avoid accidental destructive behavior."
+  tasks:
+    - "Break work down by Tailscale OpenAPI domain or endpoint group."
+    - "Include tests or verification for MCP registration, grant enforcement, and Tailscale client behavior."
+    - "Include documentation updates for newly exposed tools, resources, and required grants."
