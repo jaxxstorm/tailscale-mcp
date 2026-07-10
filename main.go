@@ -11,9 +11,11 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/alecthomas/kong"
+	"github.com/jaxxstorm/tailscale-mcp/internal/curatedtools"
 	"github.com/jaxxstorm/tailscale-mcp/internal/readapi"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -22,22 +24,246 @@ import (
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/term"
 	tsapi "tailscale.com/client/tailscale/v2"
+	_ "tailscale.com/feature/identityfederation"
+	_ "tailscale.com/feature/oauthkey"
 	"tailscale.com/tsnet"
 )
 
 type CLI struct {
-	Tailnet  string `env:"TAILSCALE_TAILNET" required:""`
-	APIKey   string `env:"TAILSCALE_API_KEY" required:""`
-	Hostname string `env:"TS_HOSTNAME" default:"ts-mcp"`
-	Port     int    `env:"TS_PORT" default:"8080"`
-	AuthKey  string `env:"TS_AUTH_KEY" default:""`
-	Debug    bool   `short:"d"`
-	Version  bool   `short:"v"`
-	Stdio    bool   `help:"Use stdio mode instead of HTTP" default:"false"`
+	Tailnet       string `env:"TAILSCALE_TAILNET" required:""`
+	Credential    string `env:"TAILSCALE_OAUTH_TOKEN" required:"" help:"OAuth, federated, or bearer credential for Tailscale startup and API access"`
+	OAuthClientID string `name:"oauth-client-id" env:"TAILSCALE_OAUTH_CLIENT_ID" help:"OAuth client ID to use when TAILSCALE_OAUTH_TOKEN is a raw tskey-client secret"`
+	Hostname      string `env:"TS_HOSTNAME" default:"ts-mcp"`
+	Port          int    `env:"TS_PORT" default:"8080"`
+	AdvertiseTags string `env:"TS_ADVERTISE_TAGS" help:"Comma-separated Tailscale tags to advertise when minting tsnet auth keys from OAuth or federated credentials"`
+	ForceLogin    bool   `env:"TSNET_FORCE_LOGIN" default:"true" help:"Force tsnet to use the supplied startup credential even when local state exists"`
+	LocalCLI      bool   `env:"TAILSCALE_LOCAL_CLI" help:"Enable optional read-only tools that shell out to the local tailscale CLI"`
+	Debug         bool   `short:"d"`
+	Version       bool   `short:"v"`
+	Stdio         bool   `help:"Use deprecated stdio mode instead of Streamable HTTP" default:"false"`
 }
+
+const (
+	streamableHTTPTransportName = "Streamable HTTP"
+	mcpEndpointPath             = "/mcp"
+	defaultLocalStreamableAddr  = "127.0.0.1:8080"
+	tailscaleOAuthTokenEnv      = "TAILSCALE_OAUTH_TOKEN"
+)
 
 var buildVersion = "0.0.2"
 var logger *zap.Logger
+
+type CredentialKind string
+
+const (
+	CredentialUnknown   CredentialKind = "unknown"
+	CredentialBearer    CredentialKind = "bearer"
+	CredentialOAuth     CredentialKind = "oauth"
+	CredentialFederated CredentialKind = "federated"
+)
+
+type TailscaleCredential struct {
+	Kind         CredentialKind
+	Token        string
+	ClientID     string
+	ClientSecret string
+	IDToken      string
+	Audience     string
+	Scopes       []string
+}
+
+type credentialJSON struct {
+	Type         string   `json:"type"`
+	Token        string   `json:"token"`
+	ClientID     string   `json:"clientId"`
+	ClientSecret string   `json:"clientSecret"`
+	IDToken      string   `json:"idToken"`
+	Audience     string   `json:"audience"`
+	Scopes       []string `json:"scopes"`
+}
+
+func ParseTailscaleCredential(raw string) (TailscaleCredential, error) {
+	return ParseTailscaleCredentialWithClientID(raw, "")
+}
+
+func ParseTailscaleCredentialWithClientID(raw, clientID string) (TailscaleCredential, error) {
+	raw = strings.TrimSpace(raw)
+	clientID = strings.TrimSpace(clientID)
+	if raw == "" {
+		return TailscaleCredential{}, fmt.Errorf("%s is required", tailscaleOAuthTokenEnv)
+	}
+
+	if strings.HasPrefix(raw, "{") {
+		var cfg credentialJSON
+		if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+			return TailscaleCredential{}, fmt.Errorf("failed to parse %s JSON: %w", tailscaleOAuthTokenEnv, err)
+		}
+		cred := TailscaleCredential{
+			Kind:         CredentialKind(strings.ToLower(cfg.Type)),
+			Token:        strings.TrimSpace(cfg.Token),
+			ClientID:     strings.TrimSpace(cfg.ClientID),
+			ClientSecret: strings.TrimSpace(cfg.ClientSecret),
+			IDToken:      strings.TrimSpace(cfg.IDToken),
+			Audience:     strings.TrimSpace(cfg.Audience),
+			Scopes:       cfg.Scopes,
+		}
+		if cred.Kind == "" {
+			cred.Kind = classifyCredential(cred)
+		}
+		return cred, cred.validate()
+	}
+
+	if strings.HasPrefix(raw, "tskey-client-") {
+		if clientID != "" {
+			cred := TailscaleCredential{Kind: CredentialOAuth, ClientID: clientID, ClientSecret: raw}
+			return cred, cred.validate()
+		}
+		return TailscaleCredential{}, fmt.Errorf("%s contains an OAuth client secret without a client ID; use JSON like {\"type\":\"oauth\",\"clientId\":\"k...\",\"clientSecret\":\"tskey-client-...\",\"scopes\":[\"all\"]}", tailscaleOAuthTokenEnv)
+	}
+
+	cred := TailscaleCredential{Kind: CredentialBearer, Token: raw}
+	return cred, nil
+}
+
+func classifyCredential(cred TailscaleCredential) CredentialKind {
+	switch {
+	case cred.ClientID != "" && cred.ClientSecret != "":
+		return CredentialOAuth
+	case cred.ClientID != "" && (cred.IDToken != "" || cred.Audience != ""):
+		return CredentialFederated
+	case cred.Token != "":
+		return CredentialBearer
+	default:
+		return CredentialUnknown
+	}
+}
+
+func (c TailscaleCredential) validate() error {
+	switch c.Kind {
+	case CredentialOAuth:
+		if c.ClientID == "" || c.ClientSecret == "" {
+			return errors.New("oauth credential requires clientId and clientSecret")
+		}
+	case CredentialFederated:
+		if c.ClientID == "" {
+			return errors.New("federated credential requires clientId")
+		}
+		if c.IDToken == "" {
+			return errors.New("federated credential requires idToken for Admin API access")
+		}
+	case CredentialBearer:
+		if c.Token == "" {
+			return errors.New("bearer credential requires token")
+		}
+	case CredentialUnknown:
+		return errors.New("credential type is unknown")
+	default:
+		return fmt.Errorf("unsupported credential type %q", c.Kind)
+	}
+	return nil
+}
+
+func (c TailscaleCredential) AdminAuth() tsapi.Auth {
+	switch c.Kind {
+	case CredentialOAuth:
+		return &tsapi.OAuth{ClientID: c.ClientID, ClientSecret: c.ClientSecret, Scopes: c.Scopes}
+	case CredentialFederated:
+		return &tsapi.IdentityFederation{ClientID: c.ClientID, IDTokenFunc: func() (string, error) { return c.IDToken, nil }}
+	case CredentialBearer:
+		return staticBearerAuth{Token: c.Token}
+	default:
+		return nil
+	}
+}
+
+func (c TailscaleCredential) AdminHTTPClient(base *http.Client, baseURL string) *http.Client {
+	if base == nil {
+		base = http.DefaultClient
+	}
+	auth := c.AdminAuth()
+	if auth == nil {
+		return base
+	}
+	return auth.HTTPClient(base, baseURL)
+}
+
+func (c TailscaleCredential) ConfigureTSNet(s *tsnet.Server) {
+	switch c.Kind {
+	case CredentialOAuth:
+		s.ClientSecret = c.ClientSecret
+	case CredentialFederated:
+		s.ClientID = c.ClientID
+		s.IDToken = c.IDToken
+		s.Audience = c.Audience
+	case CredentialBearer:
+		s.AuthKey = c.Token
+	}
+}
+
+func (c TailscaleCredential) RequiresTSNetAdvertiseTags() bool {
+	switch c.Kind {
+	case CredentialOAuth, CredentialFederated:
+		return true
+	case CredentialBearer:
+		return strings.HasPrefix(c.Token, "tskey-client-")
+	default:
+		return false
+	}
+}
+
+func parseAdvertiseTags(raw string) ([]string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+	parts := strings.Split(raw, ",")
+	tags := make([]string, 0, len(parts))
+	for _, part := range parts {
+		tag := strings.TrimSpace(part)
+		if tag == "" {
+			continue
+		}
+		if !strings.HasPrefix(tag, "tag:") {
+			return nil, fmt.Errorf("advertise tag %q must start with tag:", tag)
+		}
+		tags = append(tags, tag)
+	}
+	return tags, nil
+}
+
+type staticBearerAuth struct {
+	Token string
+}
+
+func (a staticBearerAuth) HTTPClient(orig *http.Client, _ string) *http.Client {
+	transport := orig.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	return &http.Client{
+		Transport:     bearerRoundTripper{token: a.Token, base: transport},
+		CheckRedirect: orig.CheckRedirect,
+		Jar:           orig.Jar,
+		Timeout:       orig.Timeout,
+	}
+}
+
+type bearerRoundTripper struct {
+	token string
+	base  http.RoundTripper
+}
+
+func (rt bearerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	clone := req.Clone(req.Context())
+	clone.Header.Set("Authorization", "Bearer "+rt.token)
+	return rt.base.RoundTrip(clone)
+}
+
+func ValidateCredential(ctx context.Context, client *tsapi.Client) error {
+	if _, err := client.TailnetSettings().Get(ctx); err != nil {
+		return fmt.Errorf("failed to validate %s with tailnet settings read; verify the credential, tailnet, and required scopes: %w", tailscaleOAuthTokenEnv, err)
+	}
+	return nil
+}
 
 // MCPCapability represents MCP-specific capabilities from Tailscale grants
 type MCPCapability struct {
@@ -305,6 +531,22 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+func allowOriginMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin != "" && !strings.HasPrefix(origin, "http://"+r.Host) && !strings.HasPrefix(origin, "https://"+r.Host) {
+			logger.Warn("Forbidden origin", zap.String("origin", origin))
+			http.Error(w, "forbidden origin", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func streamableHTTPHandler(streamable http.Handler, tsServer *tsnet.Server) http.Handler {
+	return loggingMiddleware(allowOriginMiddleware(grantMiddleware(streamable, tsServer)))
+}
+
 func main() {
 	var cli CLI
 	kong.Parse(&cli)
@@ -326,14 +568,32 @@ func main() {
 		zap.Bool("debug", cli.Debug),
 		zap.Bool("stdio", cli.Stdio),
 	)
+	credential, err := ParseTailscaleCredentialWithClientID(cli.Credential, cli.OAuthClientID)
+	if err != nil {
+		logger.Fatal("Invalid Tailscale credential configuration", zap.Error(err))
+	}
+	advertiseTags, err := parseAdvertiseTags(cli.AdvertiseTags)
+	if err != nil {
+		logger.Fatal("Invalid Tailscale advertise tags", zap.Error(err))
+	}
+	if credential.RequiresTSNetAdvertiseTags() && len(advertiseTags) == 0 {
+		logger.Fatal("Tailscale credential requires advertised tags for tsnet startup",
+			zap.String("env", "TS_ADVERTISE_TAGS"),
+			zap.String("example", "tag:mcp-server"),
+		)
+	}
+	logger.Info("Configured Tailscale credential", zap.String("credential_type", string(credential.Kind)))
 
 	tsAdminClient := &tsapi.Client{
 		Tailnet: cli.Tailnet,
-		APIKey:  cli.APIKey,
+		Auth:    credential.AdminAuth(),
 	}
 	readAPIClient := readapi.Client{
-		Tailnet: cli.Tailnet,
-		APIKey:  cli.APIKey,
+		Tailnet:    cli.Tailnet,
+		HTTPClient: credential.AdminHTTPClient(nil, "https://api.tailscale.com"),
+	}
+	if err := ValidateCredential(context.Background(), tsAdminClient); err != nil {
+		logger.Fatal("Tailscale credential validation failed", zap.Error(err))
 	}
 
 	mcpServer := server.NewMCPServer("ts-mcp", buildVersion)
@@ -341,56 +601,62 @@ func main() {
 	registerCoreMCP(mcpServer, tsAdminClient)
 	readapi.RegisterTools(mcpServer, readAPIClient, checkToolAccess)
 	readapi.RegisterResources(mcpServer, readAPIClient, checkResourceAccess)
+	curatedtools.RegisterAll(mcpServer, curatedtools.Options{Client: readAPIClient, Check: checkToolAccess, LocalCLI: cli.LocalCLI})
 
-	// stdio mode
+	// Deprecated stdio compatibility mode.
 	if cli.Stdio {
-		logger.Info("Starting MCP server in stdio mode")
+		logger.Warn("Stdio transport is deprecated; use Streamable HTTP instead",
+			zap.String("transport", "stdio"),
+			zap.String("recommended_transport", streamableHTTPTransportName),
+			zap.String("recommended_endpoint", mcpEndpointPath),
+		)
+		logger.Info("Starting deprecated MCP stdio transport")
 		if err := server.ServeStdio(mcpServer); err != nil {
 			logger.Fatal("Stdio server error", zap.Error(err))
 		}
 		os.Exit(0)
 	}
+	if err := os.Setenv("TSNET_FORCE_LOGIN", strconv.FormatBool(cli.ForceLogin)); err != nil {
+		logger.Fatal("Failed to configure tsnet force login", zap.Error(err))
+	}
+	if cli.ForceLogin {
+		logger.Info("Forcing tsnet login with supplied startup credential", zap.String("env", "TSNET_FORCE_LOGIN"))
+	}
 
 	tsServer := &tsnet.Server{
-		Hostname: cli.Hostname,
-		AuthKey:  cli.AuthKey,
+		Hostname:      cli.Hostname,
+		AdvertiseTags: advertiseTags,
 	}
+	credential.ConfigureTSNet(tsServer)
 	defer tsServer.Close()
 
 	tsLn, err := tsServer.Listen("tcp", fmt.Sprintf(":%d", cli.Port))
 	if err != nil {
 		logger.Fatal("tsnet listen error", zap.Error(err))
 	}
-	logger.Info("Serving MCP via Tailscale", zap.String("address", tsLn.Addr().String()))
+	logger.Info("Serving MCP via Tailscale",
+		zap.String("transport", streamableHTTPTransportName),
+		zap.String("address", tsLn.Addr().String()),
+		zap.String("endpoint", mcpEndpointPath),
+	)
 
 	streamable := server.NewStreamableHTTPServer(
 		mcpServer,
-		server.WithEndpointPath("/mcp"),
+		server.WithEndpointPath(mcpEndpointPath),
 	)
 
-	allowOrigin := func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			origin := r.Header.Get("Origin")
-			if origin != "" && !strings.HasPrefix(origin, "http://"+r.Host) && !strings.HasPrefix(origin, "https://"+r.Host) {
-				logger.Warn("Forbidden origin", zap.String("origin", origin))
-				http.Error(w, "forbidden origin", http.StatusForbidden)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
-	}
-
 	mux := http.NewServeMux()
-
-	// Add logging middleware to the chain
-	mux.Handle("/mcp", loggingMiddleware(allowOrigin(grantMiddleware(streamable, tsServer))))
+	mux.Handle(mcpEndpointPath, streamableHTTPHandler(streamable, tsServer))
 
 	handlerWithMiddleware := mux
 
 	go func() {
-		localAddr := "127.0.0.1:8080"
-		logger.Info("Serving MCP locally", zap.String("address", localAddr))
-		if err := http.ListenAndServe(localAddr, handlerWithMiddleware); err != nil {
+		logger.Info("Serving MCP locally",
+			zap.String("transport", streamableHTTPTransportName),
+			zap.String("address", defaultLocalStreamableAddr),
+			zap.String("endpoint", mcpEndpointPath),
+		)
+		if err := http.ListenAndServe(defaultLocalStreamableAddr, handlerWithMiddleware); err != nil {
 			logger.Fatal("Local server error", zap.Error(err))
 		}
 	}()
@@ -523,6 +789,9 @@ func registerCoreMCP(mcpServer *server.MCPServer, tsAdminClient *tsapi.Client) {
 
 	mcpServer.AddTool(mcp.NewTool("get_device_info",
 		mcp.WithDescription("Fetch device details by ID, IP, or hostname"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
 		mcp.WithString("device", mcp.Required(), mcp.Description("Device ID, IP, or hostname")),
 	), func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		logger.Debug("Tool called", zap.String("tool", "get_device_info"))
@@ -552,7 +821,12 @@ func registerCoreMCP(mcpServer *server.MCPServer, tsAdminClient *tsapi.Client) {
 		return mcp.NewToolResultText(string(data)), nil
 	})
 
-	mcpServer.AddTool(mcp.NewTool("list_all_devices", mcp.WithDescription("List all devices in the tailnet")),
+	mcpServer.AddTool(mcp.NewTool("list_all_devices",
+		mcp.WithDescription("List all devices in the tailnet"),
+		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+	),
 		func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			logger.Debug("Tool called", zap.String("tool", "list_all_devices"))
 			if err := checkToolAccess(ctx, "list_all_devices"); err != nil {

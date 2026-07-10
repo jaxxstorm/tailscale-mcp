@@ -32,7 +32,9 @@ type Mapping struct {
 	URI             string      `json:"uri,omitempty"`
 	GrantPermission string      `json:"grantPermission,omitempty"`
 	Rationale       string      `json:"rationale"`
+	ReadOnly        bool        `json:"readOnly,omitempty"`
 	Destructive     bool        `json:"destructive,omitempty"`
+	Idempotent      bool        `json:"idempotent,omitempty"`
 	Confirmation    string      `json:"confirmation,omitempty"`
 }
 
@@ -54,7 +56,9 @@ type Record struct {
 	ExclusionReason string      `json:"exclusionReason,omitempty"`
 	ExclusionNotes  string      `json:"exclusionNotes,omitempty"`
 	FollowUp        string      `json:"followUp,omitempty"`
+	ReadOnly        bool        `json:"readOnly,omitempty"`
 	Destructive     bool        `json:"destructive,omitempty"`
+	Idempotent      bool        `json:"idempotent,omitempty"`
 	Confirmation    string      `json:"confirmation,omitempty"`
 }
 
@@ -112,7 +116,7 @@ func IsDestructive(method string, operationID string) bool {
 		return true
 	}
 	operationID = strings.ToLower(operationID)
-	return strings.Contains(operationID, "delete") || strings.Contains(operationID, "expire") || strings.Contains(operationID, "revoke")
+	return strings.Contains(operationID, "delete") || strings.Contains(operationID, "expire") || strings.Contains(operationID, "revoke") || strings.Contains(operationID, "suspend") || strings.Contains(operationID, "rotate")
 }
 
 func ClassifyDefault(op Operation) MappingType {

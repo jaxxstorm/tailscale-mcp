@@ -25,6 +25,7 @@ func RegisterTools(mcpServer *server.MCPServer, client Client, check AccessCheck
 	for _, endpoint := range ToolEndpoints() {
 		endpoint := endpoint
 		options := []mcp.ToolOption{mcp.WithDescription(endpoint.Summary)}
+		options = append(options, ToolHintOptions(endpoint)...)
 		for _, param := range endpoint.Parameters {
 			if param.Location == QueryParam || param.Location == PathParam {
 				props := []mcp.PropertyOption{mcp.Description(param.Description)}
@@ -54,6 +55,15 @@ func RegisterTools(mcpServer *server.MCPServer, client Client, check AccessCheck
 			}
 			return mcp.NewToolResultText(prettyJSON(data)), nil
 		})
+	}
+}
+
+func ToolHintOptions(endpoint Endpoint) []mcp.ToolOption {
+	hints := endpoint.ToolHints()
+	return []mcp.ToolOption{
+		mcp.WithReadOnlyHintAnnotation(hints.ReadOnly),
+		mcp.WithDestructiveHintAnnotation(hints.Destructive),
+		mcp.WithIdempotentHintAnnotation(hints.Idempotent),
 	}
 }
 

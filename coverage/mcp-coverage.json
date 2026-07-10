@@ -13,7 +13,9 @@
       "mcpName": "tailscale_get_contacts",
       "grantPermission": "tool:tailscale_get_contacts",
       "status": "implemented",
-      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar.",
+      "readOnly": true,
+      "idempotent": true
     },
     {
       "operation": {
@@ -72,6 +74,7 @@
       "grantPermission": "tool:tailscale_set_dns_configuration",
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "idempotent": true,
       "confirmation": "setDnsConfiguration"
     },
     {
@@ -101,6 +104,7 @@
       "grantPermission": "tool:tailscale_set_dns_nameservers",
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "idempotent": true,
       "confirmation": "setDnsNameservers"
     },
     {
@@ -130,6 +134,7 @@
       "grantPermission": "tool:tailscale_set_dns_preferences",
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "idempotent": true,
       "confirmation": "setDnsPreferences"
     },
     {
@@ -159,6 +164,7 @@
       "grantPermission": "tool:tailscale_set_dns_search_paths",
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "idempotent": true,
       "confirmation": "setDnsSearchPaths"
     },
     {
@@ -203,6 +209,7 @@
       "grantPermission": "tool:tailscale_set_split_dns",
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "idempotent": true,
       "confirmation": "setSplitDns"
     },
     {
@@ -234,6 +241,7 @@
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
       "destructive": true,
+      "idempotent": true,
       "confirmation": "deleteDeviceInvite"
     },
     {
@@ -248,7 +256,9 @@
       "mcpName": "tailscale_get_device_invite",
       "grantPermission": "tool:tailscale_get_device_invite",
       "status": "implemented",
-      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar.",
+      "readOnly": true,
+      "idempotent": true
     },
     {
       "operation": {
@@ -277,7 +287,9 @@
       "mcpName": "tailscale_list_device_invites",
       "grantPermission": "tool:tailscale_list_device_invites",
       "status": "implemented",
-      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar.",
+      "readOnly": true,
+      "idempotent": true
     },
     {
       "operation": {
@@ -308,6 +320,7 @@
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
       "destructive": true,
+      "idempotent": true,
       "confirmation": "deletePostureIntegration"
     },
     {
@@ -322,7 +335,9 @@
       "mcpName": "tailscale_get_posture_integration",
       "grantPermission": "tool:tailscale_get_posture_integration",
       "status": "implemented",
-      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar.",
+      "readOnly": true,
+      "idempotent": true
     },
     {
       "operation": {
@@ -382,6 +397,7 @@
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
       "destructive": true,
+      "idempotent": true,
       "confirmation": "deleteDevice"
     },
     {
@@ -397,7 +413,9 @@
       "resourceUri": "tailscale://device/{device}",
       "grantPermission": "tool:get_device_info",
       "status": "implemented",
-      "rationale": "Parameterized device lookup by ID, hostname, or IP is exposed as a typed tool with a matching resource shape."
+      "rationale": "Parameterized device lookup by ID, hostname, or IP is exposed as a typed tool with a matching resource shape.",
+      "readOnly": true,
+      "idempotent": true
     },
     {
       "operation": {
@@ -427,6 +445,7 @@
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
       "destructive": true,
+      "idempotent": true,
       "confirmation": "deleteCustomDevicePostureAttributes"
     },
     {
@@ -442,6 +461,7 @@
       "grantPermission": "tool:tailscale_set_custom_device_posture_attributes",
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "idempotent": true,
       "confirmation": "setCustomDevicePostureAttributes"
     },
     {
@@ -457,6 +477,8 @@
       "grantPermission": "tool:tailscale_authorize_device",
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "destructive": true,
+      "idempotent": true,
       "confirmation": "authorizeDevice"
     },
     {
@@ -473,6 +495,7 @@
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
       "destructive": true,
+      "idempotent": true,
       "confirmation": "expireDeviceKey"
     },
     {
@@ -488,6 +511,7 @@
       "grantPermission": "tool:tailscale_set_device_ip",
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "idempotent": true,
       "confirmation": "setDeviceIp"
     },
     {
@@ -518,6 +542,7 @@
       "grantPermission": "tool:tailscale_set_device_name",
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "idempotent": true,
       "confirmation": "setDeviceName"
     },
     {
@@ -547,6 +572,7 @@
       "grantPermission": "tool:tailscale_set_device_routes",
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "idempotent": true,
       "confirmation": "setDeviceRoutes"
     },
     {
@@ -562,6 +588,7 @@
       "grantPermission": "tool:tailscale_set_device_tags",
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "idempotent": true,
       "confirmation": "setDeviceTags"
     },
     {
@@ -592,7 +619,9 @@
       "resourceUri": "tailscale://devices",
       "grantPermission": "tool:list_all_devices",
       "status": "implemented",
-      "rationale": "Device collection is exposed as both a Claude-compatible tool and a stable resource."
+      "rationale": "Device collection is exposed as both a Claude-compatible tool and a stable resource.",
+      "readOnly": true,
+      "idempotent": true
     },
     {
       "operation": {
@@ -637,6 +666,7 @@
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
       "destructive": true,
+      "idempotent": true,
       "confirmation": "deleteKey"
     },
     {
@@ -651,7 +681,9 @@
       "mcpName": "tailscale_get_key",
       "grantPermission": "tool:tailscale_get_key",
       "status": "implemented",
-      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar.",
+      "readOnly": true,
+      "idempotent": true
     },
     {
       "operation": {
@@ -666,6 +698,7 @@
       "grantPermission": "tool:tailscale_set_key",
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "idempotent": true,
       "confirmation": "setKey"
     },
     {
@@ -681,6 +714,7 @@
       "grantPermission": "tool:tailscale_get_aws_external_id",
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "idempotent": true,
       "confirmation": "getAwsExternalId"
     },
     {
@@ -695,7 +729,9 @@
       "mcpName": "tailscale_validate_aws_external_id",
       "grantPermission": "tool:tailscale_validate_aws_external_id",
       "status": "implemented",
-      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar.",
+      "readOnly": true,
+      "idempotent": true
     },
     {
       "operation": {
@@ -709,7 +745,9 @@
       "mcpName": "tailscale_list_configuration_audit_logs",
       "grantPermission": "tool:tailscale_list_configuration_audit_logs",
       "status": "implemented",
-      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar.",
+      "readOnly": true,
+      "idempotent": true
     },
     {
       "operation": {
@@ -723,7 +761,9 @@
       "mcpName": "tailscale_list_network_flow_logs",
       "grantPermission": "tool:tailscale_list_network_flow_logs",
       "status": "implemented",
-      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar.",
+      "readOnly": true,
+      "idempotent": true
     },
     {
       "operation": {
@@ -739,6 +779,7 @@
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
       "destructive": true,
+      "idempotent": true,
       "confirmation": "disableLogStreaming"
     },
     {
@@ -753,7 +794,9 @@
       "mcpName": "tailscale_get_log_streaming_configuration",
       "grantPermission": "tool:tailscale_get_log_streaming_configuration",
       "status": "implemented",
-      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar.",
+      "readOnly": true,
+      "idempotent": true
     },
     {
       "operation": {
@@ -768,6 +811,7 @@
       "grantPermission": "tool:tailscale_set_log_streaming_configuration",
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "idempotent": true,
       "confirmation": "setLogStreamingConfiguration"
     },
     {
@@ -782,7 +826,9 @@
       "mcpName": "tailscale_get_log_streaming_status",
       "grantPermission": "tool:tailscale_get_log_streaming_status",
       "status": "implemented",
-      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar.",
+      "readOnly": true,
+      "idempotent": true
     },
     {
       "operation": {
@@ -827,6 +873,7 @@
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
       "destructive": true,
+      "idempotent": true,
       "confirmation": "deleteOAuthApp"
     },
     {
@@ -841,7 +888,9 @@
       "mcpName": "tailscale_get_oauth_app",
       "grantPermission": "tool:tailscale_get_oauth_app",
       "status": "implemented",
-      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar.",
+      "readOnly": true,
+      "idempotent": true
     },
     {
       "operation": {
@@ -856,6 +905,7 @@
       "grantPermission": "tool:tailscale_update_oauth_app",
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "idempotent": true,
       "confirmation": "updateOAuthApp"
     },
     {
@@ -885,6 +935,7 @@
       "grantPermission": "tool:tailscale_set_policy_file",
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "idempotent": true,
       "confirmation": "setPolicyFile"
     },
     {
@@ -899,7 +950,9 @@
       "mcpName": "tailscale_preview_rule_matches",
       "grantPermission": "tool:tailscale_preview_rule_matches",
       "status": "implemented",
-      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar.",
+      "readOnly": true,
+      "idempotent": true
     },
     {
       "operation": {
@@ -913,7 +966,9 @@
       "mcpName": "tailscale_validate_and_test_policy_file",
       "grantPermission": "tool:tailscale_validate_and_test_policy_file",
       "status": "implemented",
-      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar.",
+      "readOnly": true,
+      "idempotent": true
     },
     {
       "operation": {
@@ -943,6 +998,7 @@
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
       "destructive": true,
+      "idempotent": true,
       "confirmation": "deleteService"
     },
     {
@@ -957,7 +1013,9 @@
       "mcpName": "tailscale_get_service",
       "grantPermission": "tool:tailscale_get_service",
       "status": "implemented",
-      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar.",
+      "readOnly": true,
+      "idempotent": true
     },
     {
       "operation": {
@@ -972,6 +1030,7 @@
       "grantPermission": "tool:tailscale_update_service",
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "idempotent": true,
       "confirmation": "updateService"
     },
     {
@@ -986,7 +1045,9 @@
       "mcpName": "tailscale_get_service_device_approval",
       "grantPermission": "tool:tailscale_get_service_device_approval",
       "status": "implemented",
-      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar.",
+      "readOnly": true,
+      "idempotent": true
     },
     {
       "operation": {
@@ -1001,6 +1062,8 @@
       "grantPermission": "tool:tailscale_update_service_device_approval",
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "destructive": true,
+      "idempotent": true,
       "confirmation": "updateServiceDeviceApproval"
     },
     {
@@ -1015,7 +1078,9 @@
       "mcpName": "tailscale_list_service_hosts",
       "grantPermission": "tool:tailscale_list_service_hosts",
       "status": "implemented",
-      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar.",
+      "readOnly": true,
+      "idempotent": true
     },
     {
       "operation": {
@@ -1089,6 +1154,7 @@
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
       "destructive": true,
+      "idempotent": true,
       "confirmation": "deleteUserInvite"
     },
     {
@@ -1103,7 +1169,9 @@
       "mcpName": "tailscale_get_user_invite",
       "grantPermission": "tool:tailscale_get_user_invite",
       "status": "implemented",
-      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar.",
+      "readOnly": true,
+      "idempotent": true
     },
     {
       "operation": {
@@ -1132,7 +1200,9 @@
       "mcpName": "tailscale_list_users",
       "grantPermission": "tool:tailscale_list_users",
       "status": "implemented",
-      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar.",
+      "readOnly": true,
+      "idempotent": true
     },
     {
       "operation": {
@@ -1146,7 +1216,9 @@
       "mcpName": "tailscale_get_user",
       "grantPermission": "tool:tailscale_get_user",
       "status": "implemented",
-      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar.",
+      "readOnly": true,
+      "idempotent": true
     },
     {
       "operation": {
@@ -1177,6 +1249,7 @@
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
       "destructive": true,
+      "idempotent": true,
       "confirmation": "deleteUser"
     },
     {
@@ -1222,6 +1295,8 @@
       "grantPermission": "tool:tailscale_suspend_user",
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "destructive": true,
+      "idempotent": true,
       "confirmation": "suspendUser"
     },
     {
@@ -1267,6 +1342,7 @@
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
       "destructive": true,
+      "idempotent": true,
       "confirmation": "deleteWebhook"
     },
     {
@@ -1281,7 +1357,9 @@
       "mcpName": "tailscale_get_webhook",
       "grantPermission": "tool:tailscale_get_webhook",
       "status": "implemented",
-      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
+      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar.",
+      "readOnly": true,
+      "idempotent": true
     },
     {
       "operation": {
@@ -1311,6 +1389,7 @@
       "grantPermission": "tool:tailscale_rotate_webhook_secret",
       "status": "implemented",
       "rationale": "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token.",
+      "destructive": true,
       "confirmation": "rotateWebhookSecret"
     },
     {

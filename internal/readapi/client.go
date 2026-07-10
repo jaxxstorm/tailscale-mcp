@@ -15,9 +15,15 @@ const defaultBaseURL = "https://api.tailscale.com/api/v2"
 
 type Client struct {
 	Tailnet    string
-	APIKey     string
+	Token      string
 	BaseURL    string
 	HTTPClient *http.Client
+}
+
+type RawResponse struct {
+	StatusCode int
+	Header     http.Header
+	Body       []byte
 }
 
 type APIError struct {
@@ -63,7 +69,9 @@ func (c Client) Do(ctx context.Context, endpoint Endpoint, args map[string]any) 
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
 
 	hc := c.HTTPClient
 	if hc == nil {
@@ -86,6 +94,61 @@ func (c Client) Do(ctx context.Context, endpoint Endpoint, args map[string]any) 
 		return json.RawMessage(`{}`), nil
 	}
 	return json.RawMessage(data), nil
+}
+
+func (c Client) DoRaw(ctx context.Context, endpoint Endpoint, args map[string]any, body []byte, headers map[string]string) (RawResponse, error) {
+	path, query, err := Expand(endpoint, c.Tailnet, args)
+	if err != nil {
+		return RawResponse{}, err
+	}
+
+	base := strings.TrimRight(c.BaseURL, "/")
+	if base == "" {
+		base = defaultBaseURL
+	}
+	reqURL := base + path
+	if query != "" {
+		reqURL += "?" + query
+	}
+
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, endpoint.Method, reqURL, reader)
+	if err != nil {
+		return RawResponse{}, err
+	}
+	for key, value := range headers {
+		if value != "" {
+			req.Header.Set(key, value)
+		}
+	}
+	if req.Header.Get("Accept") == "" {
+		req.Header.Set("Accept", "application/json")
+	}
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+
+	hc := c.HTTPClient
+	if hc == nil {
+		hc = http.DefaultClient
+	}
+	resp, err := hc.Do(req)
+	if err != nil {
+		return RawResponse{}, err
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return RawResponse{}, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return RawResponse{}, SanitizeAPIError(resp.StatusCode, data)
+	}
+	return RawResponse{StatusCode: resp.StatusCode, Header: resp.Header.Clone(), Body: data}, nil
 }
 
 func Expand(endpoint Endpoint, tailnet string, args map[string]any) (string, string, error) {

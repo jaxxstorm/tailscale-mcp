@@ -1,370 +1,55 @@
 # Tailscale MCP Server
 
-An MCP (Model Context Protocol) server for Tailscale, enabling detailed queries about devices, policy files, and tailnet settings via Claude Desktop or other compatible LLM clients. Features comprehensive Tailscale OAuth grants integration for fine-grained access control.
+An MCP (Model Context Protocol) server for Tailscale, enabling detailed queries and operations for devices, DNS, users, invites, keys, webhooks, services, logging, policy validation, and tailnet settings. It serves MCP over Streamable HTTP on `/mcp` and uses Tailscale OAuth grants for fine-grained access control.
 
 ## Features
 
-* **Multiple Server Modes**: Supports both stdio and HTTP (with SSE) modes
-* **Comprehensive Tailscale Integration**: Query devices, DNS, users, invites, keys, webhooks, services, logging, policy validation, and tailnet settings
-* **OAuth Grants Authorization**: Fine-grained access control using Tailscale grants with custom MCP capabilities
-* **Dual Network Access**: Accessible via both Tailscale network and localhost
-* **Claude Desktop Compatible**: Optimized for Claude Desktop integration
-* **Flexible Logging**: TTY-aware logging with configurable debug levels
+* **Streamable HTTP Transport**: Serves MCP on `/mcp` via Tailscale and localhost
+* **Comprehensive Tailscale Integration**: Full mapped coverage of the vendored Tailscale OpenAPI snapshot
+* **OAuth Grants Authorization**: Fine-grained MCP access control with `jaxxstorm.com/cap/mcp`
+* **Single Credential Startup**: Uses `TAILSCALE_OAUTH_TOKEN` for Admin API access and tsnet startup
+* **Legacy stdio Compatibility**: Deprecated stdio mode remains available for older local clients
 
-## Prerequisites
-
-* [Tailscale](https://tailscale.com) account with an Admin API key
-* Go 1.22 or higher (if building from source)
-
-## Installation
-
-### Download Pre-Built Binaries
-
-Grab the latest pre-built binary for your platform from the release page.
-
-#### macOS
-
-1. Download the latest release archive for macOS (`ts-mcp-<version>-darwin-amd64.tar.gz` or `ts-mcp-<version>-darwin-arm64.tar.gz`)
-2. Extract and install:
+## Quick Start
 
 ```bash
-tar -xzf ts-mcp-<version>-darwin-*.tar.gz
-sudo mv ts-mcp /usr/local/bin/
-```
-
-You can also install with homebrew:
-```bash
-brew install jaxxstorm/tap/ts-mcp
-```
-
-#### Linux
-
-1. Download the latest release archive for Linux (`ts-mcp-<version>-linux-amd64.tar.gz` or `ts-mcp-<version>-linux-arm64.tar.gz`)
-2. Extract and install:
-
-```bash
-tar -xzf ts-mcp-<version>-linux-*.tar.gz
-sudo mv ts-mcp /usr/local/bin/
-```
-
-#### Windows
-
-1. Download the latest release ZIP archive for Windows (`ts-mcp-<version>-windows-amd64.zip` or `ts-mcp-<version>-windows-arm64.zip`)
-2. Extract the binary (`ts-mcp.exe`) and move it to a preferred location, such as `C:\Program Files\ts-mcp\`
-3. Add the chosen location to your system's PATH if desired
-
-### Building From Source
-
-If you prefer building the binary from source:
-
-1. **Clone the Repository**
-```bash
-git clone <repo_url>
-cd <repo_dir>
-```
-
-2. **Install Dependencies**
-```bash
-go mod tidy
-```
-
-3. **Build the Binary**
-```bash
-go build -o ts-mcp main.go
-```
-
-## Configuration
-
-### Required Environment Variables
-
-```bash
-export TAILSCALE_API_KEY="tskey-yourapikey"
+export TAILSCALE_OAUTH_TOKEN='{"type":"oauth","clientId":"k123...","clientSecret":"tskey-client-...","scopes":["all"]}'
 export TAILSCALE_TAILNET="yourtailnet.com"
-```
-
-### Optional Environment Variables
-
-```bash
-export TS_HOSTNAME="ts-mcp"          # Tailscale hostname (default: ts-mcp)
-export TS_PORT="8080"                # Port to listen on (default: 8080)
-export TS_AUTH_KEY=""                # Tailscale auth key for automatic authentication
-```
-
-### Command Line Options
-
-* `--debug` / `-d`: Enable debug logging
-* `--version` / `-v`: Show version information
-* `--stdio`: Use stdio mode instead of HTTP (required for Claude Desktop)
-
-## Getting Your API Key
-
-1. Go to [Tailscale Admin Console](https://login.tailscale.com/admin/settings/keys)
-2. Generate an API key with the read permissions needed for the tools and resources you plan to expose, such as:
-   - Read devices
-   - Read DNS settings
-   - Read policy file
-   - Read tailnet settings
-   - Read users, invites, keys, webhooks, services, logging, OAuth apps, or posture integrations as needed
-
-## OAuth Grants & Access Control
-
-This server implements fine-grained access control using Tailscale OAuth grants. You can configure custom MCP capabilities in your Tailscale ACL policy file to control which users can access specific tools and resources.
-
-### ACL Configuration Example
-
-Add the following to your Tailscale ACL policy file:
-
-```json
-{
-  "grants": [
-    {
-      "src": ["user:alice@example.com"],
-      "dst": ["tag:mcp-server"],
-      "app": {
-        "jaxxstorm.com/cap/mcp": [{
-          "tools": ["*"],
-          "resources": ["*"]
-        }]
-      }
-    },
-    {
-      "src": ["user:bob@example.com"],
-      "dst": ["tag:mcp-server"],
-      "app": {
-        "jaxxstorm.com/cap/mcp": [{
-          "tools": ["list_all_devices"],
-          "resources": ["bootstrap://status", "tailscale://devices"]
-        }]
-      }
-    }
-  ]
-}
-```
-
-### Grant Permissions
-
-**Tools**: Control which MCP tools users can execute
-- `get_device_info`: Allow querying specific device details
-- `list_all_devices`: Allow listing all devices
-- `tailscale_<operation>`: Allow a generated Tailscale read API tool, for example `tailscale_get_dns_configuration`
-- `*`: Allow all tools
-
-**Resources**: Control which MCP resources users can access
-- `bootstrap://status`: Health check endpoint
-- `tailscale://devices`: Device list resource
-- `tailscale://policy`: Policy file access
-- `tailscale://tailnet-settings`: Tailnet settings access
-- `tailscale://device`: Individual device resource access
-- `tailscale://dns/*`, `tailscale://keys`, `tailscale://webhooks`, `tailscale://services`, `tailscale://oauth-apps`, and similar read API resources
-- `*`: Allow all resources
-
-## Running the Server
-
-### HTTP Mode (Default)
-
-```bash
+export TS_ADVERTISE_TAGS="tag:mcp-server"
 ./ts-mcp
 ```
 
-The server will be accessible via:
-* **Tailscale network**: `http://<hostname>.yourtailnet.ts.net:8080/mcp`
-* **Localhost**: `http://127.0.0.1:8080/mcp`
-
-### Stdio Mode (Required for Claude Desktop)
+You can also provide the OAuth client ID separately:
 
 ```bash
-./ts-mcp --stdio
+export TAILSCALE_OAUTH_TOKEN="tskey-client-..."
+export TAILSCALE_OAUTH_CLIENT_ID="k123..."
+export TAILSCALE_TAILNET="yourtailnet.com"
+export TS_ADVERTISE_TAGS="tag:mcp-server"
+./ts-mcp
 ```
 
-## Claude Desktop Integration
+The server exposes MCP at:
 
-Claude Desktop currently supports stdio mode for MCP servers.
+* `http://<hostname>.yourtailnet.ts.net:8080/mcp`
+* `http://127.0.0.1:8080/mcp`
 
-### Configuration Steps
+## Documentation
 
-1. Locate your Claude Desktop MCP config file:
-   * **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-   * **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-   * **Linux**: `~/.config/Claude/claude_desktop_config.json`
+* [Usage Guide](docs/usage.md): installation, configuration, credentials, grants, client setup, tools, resources, coverage, and troubleshooting
+* [Coverage Report](coverage/mcp-coverage.md): generated Tailscale OpenAPI to MCP coverage mapping
+* [Parity Backlog](coverage/parity-backlog.md): generated list of unmapped API operations
 
-2. Edit `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "tailscale": {
-      "command": "/usr/local/bin/ts-mcp",
-      "args": ["--stdio"],
-      "env": {
-        "TAILSCALE_API_KEY": "tskey-yourapikey",
-        "TAILSCALE_TAILNET": "yourtailnet.com"
-      }
-    }
-  }
-}
-```
-
-3. Restart Claude Desktop
-
-Claude will now recognize your MCP server and you can interact with your Tailscale network.
-
-## Available Tools & Resources
-
-### Tools (Recommended for Claude)
-
-| Tool | Description | Arguments | Required Grant |
-|------|-------------|-----------|----------------|
-| `get_device_info` | Fetch device details by ID, IP, or hostname | `device`: Device identifier | `get_device_info` |
-| `list_all_devices` | List all devices in your tailnet | None | `list_all_devices` |
-
-Additional Tailscale API tools are generated from endpoint definitions using `tailscale_<operation>` grant names. Examples include `tailscale_get_dns_configuration`, `tailscale_list_users`, `tailscale_get_key`, `tailscale_list_webhooks`, `tailscale_list_services`, `tailscale_get_oauth_app`, and `tailscale_validate_and_test_policy_file`.
-
-Generated tools cover the full Tailscale OpenAPI snapshot. Mutating create/update/delete tools require a `confirm` argument whose value is the OpenAPI operation ID, for example `confirm: "deleteDevice"`. This is in addition to Tailscale MCP grants and Admin API token permissions.
-
-### Resources
-
-| URI | Description | Required Grant |
-|-----|-------------|----------------|
-| `bootstrap://status` | Health-check endpoint | `bootstrap://status` |
-| `tailscale://devices` | Complete device list with metadata | `tailscale://devices` |
-| `tailscale://policy` | Current Tailscale ACL policy file | `tailscale://policy` |
-| `tailscale://tailnet-settings` | Tailnet configuration and settings | `tailscale://tailnet-settings` |
-| `tailscale://device` | Individual device details (parameterized) | `tailscale://device` |
-| `tailscale://device/{deviceId}/routes` | Device subnet routes | `tailscale://device/{deviceId}/routes` |
-| `tailscale://device/{deviceId}/attributes` | Device posture attributes | `tailscale://device/{deviceId}/attributes` |
-| `tailscale://dns/configuration` | Full DNS configuration | `tailscale://dns/configuration` |
-| `tailscale://dns/nameservers` | DNS nameservers | `tailscale://dns/nameservers` |
-| `tailscale://dns/preferences` | DNS preferences | `tailscale://dns/preferences` |
-| `tailscale://dns/searchpaths` | DNS search paths | `tailscale://dns/searchpaths` |
-| `tailscale://dns/split-dns` | Split DNS settings | `tailscale://dns/split-dns` |
-| `tailscale://keys` | Active keys visible to the API token | `tailscale://keys` |
-| `tailscale://user-invites` | Open user invites | `tailscale://user-invites` |
-| `tailscale://webhooks` | Webhooks | `tailscale://webhooks` |
-| `tailscale://services` | Services | `tailscale://services` |
-| `tailscale://posture/integrations` | Posture integrations | `tailscale://posture/integrations` |
-| `tailscale://oauth-apps` | OAuth apps | `tailscale://oauth-apps` |
-
-**Note**: Tools are preferred for Claude Desktop as they provide better compatibility and error handling.
-
-## API Coverage
-
-Full Tailscale API parity is tracked with repository tooling under `tools/coverage/`. The tooling maps each Tailscale OpenAPI operation to an MCP tool, resource, prompt workflow, or reviewed exclusion, then writes generated reports under `coverage/`. The current vendored OpenAPI snapshot is fully mapped.
-
-Refresh the vendored Tailscale OpenAPI snapshot with:
+## Development
 
 ```bash
-make openapi-refresh
-```
-
-Run coverage generation with:
-
-```bash
+go test ./...
+go build ./...
 make coverage
 ```
-
-Review `coverage/mcp-coverage.md` for current MCP coverage and `coverage/parity-backlog.md` for unimplemented API operations.
-
-## Example Claude Desktop Queries
-
-### Get Device Information
-```
-Use get_device_info to get details about device "100.101.102.103"
-```
-
-### List All Devices
-```
-List all devices in my tailnet using list_all_devices
-```
-
-### Check Tailnet Policy
-```
-Show me the current Tailscale policy by reading the tailscale://policy resource
-```
-
-### Monitor Device Status
-```
-Get the status of my work laptop and show me when it was last seen
-```
-
-## Security Features
-
-* **Tailscale OAuth Integration**: Leverages Tailscale's built-in authentication
-* **Fine-grained Access Control**: Granular permissions via MCP capabilities in ACL grants
-* **Network Isolation**: All communication flows through your private Tailscale network
-* **User Context Logging**: Comprehensive audit trail of user actions
-* **Origin Validation**: HTTP mode includes origin validation for additional security
-
-## Logging
-
-The server provides comprehensive logging with multiple levels:
-
-* **Default**: Info level with key operations
-* **Debug** (`-d`): Detailed protocol-level debugging including OAuth grants inspection
-
-Log output automatically adapts:
-* **TTY**: Colorized, human-readable format with timestamps
-* **Non-TTY**: Structured JSON for log aggregation systems
-
-## Troubleshooting
-
-### Common Issues
-
-**"No MCP capabilities found"**
-- Verify your ACL policy includes the correct grants configuration
-- Check that the server node has the appropriate tags
-- Ensure the user has been granted access to MCP capabilities
-
-**"Access denied: insufficient permissions"**
-- Review the grants configuration in your ACL policy
-- Verify the user is listed in the `src` field of the relevant grant
-- Check that the requested tool/resource is included in the capability definition
-
-**"Failed to get Tailscale status"**
-- Ensure Tailscale is running and authenticated
-- Verify the API key has the required permissions
-- Check network connectivity to Tailscale coordination servers
-
-### Debug Mode
-
-Enable debug logging to see detailed protocol exchanges and OAuth grants:
-
-```bash
-./ts-mcp --debug --stdio
-```
-
-This will show:
-- Detailed MCP message flow
-- OAuth grants parsing and validation
-- User authentication context
-- Access control decisions
-
-## Dependencies
-
-* `github.com/alecthomas/kong` - CLI parsing
-* `github.com/mark3labs/mcp-go` - MCP protocol implementation
-* `github.com/tailscale/hujson` - HuJSON parsing for policy files
-* `go.uber.org/zap` - Structured logging
-* `golang.org/x/term` - TTY detection
-* `tailscale.com/client/tailscale/v2` - Tailscale API client
-* `tailscale.com/tsnet` - Tailscale network integration
-
-## Version
-
-Current version: **0.0.2**
-
-Use `./ts-mcp --version` to check your installed version.
-
-## License
-
-[Add your license information here]
-
-## Contributing
-
-[Add contribution guidelines here]
 
 ## Useful Links
 
 * [Tailscale API Documentation](https://tailscale.com/kb/1101/api/)
 * [Tailscale OAuth Grants](https://tailscale.com/kb/1017/grant-access-to-apps/)
-* [Claude Desktop](https://claude.ai)
 * [MCP Protocol Documentation](https://modelcontextprotocol.io/)

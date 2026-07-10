@@ -23,7 +23,32 @@ type Endpoint struct {
 	Parameters  []Parameter
 	Body        bool
 	ReadLike    bool
+	Destructive bool
+	Idempotent  *bool
 	Confirm     string
+}
+
+type ToolHints struct {
+	ReadOnly    bool
+	Destructive bool
+	Idempotent  bool
+}
+
+func (e Endpoint) ToolHints() ToolHints {
+	readOnly := e.Method == "GET" || e.ReadLike
+	idempotent := readOnly || e.Method == "PUT" || e.Method == "DELETE"
+	if e.Idempotent != nil {
+		idempotent = *e.Idempotent
+	}
+	return ToolHints{
+		ReadOnly:    readOnly,
+		Destructive: e.Method == "DELETE" || e.Destructive,
+		Idempotent:  idempotent,
+	}
+}
+
+func Bool(value bool) *bool {
+	return &value
 }
 
 type Resource struct {

@@ -74,7 +74,9 @@ func BuildReport(source string, ops []Operation, mappings []Mapping, exclusions 
 			record.ResourceURI = mapping.URI
 			record.GrantPermission = mapping.GrantPermission
 			record.Rationale = mapping.Rationale
+			record.ReadOnly = mapping.ReadOnly
 			record.Destructive = mapping.Destructive || IsDestructive(op.Method, op.OperationID)
+			record.Idempotent = mapping.Idempotent
 			record.Confirmation = mapping.Confirmation
 			record.Status = StatusImplemented
 		}

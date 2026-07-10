@@ -11,6 +11,8 @@ func CurrentMappings() []Mapping {
 			URI:             ResourceURI("devices"),
 			GrantPermission: ToolGrant("list_all_devices"),
 			Rationale:       "Device collection is exposed as both a Claude-compatible tool and a stable resource.",
+			ReadOnly:        true,
+			Idempotent:      true,
 		},
 		{
 			OperationID:     "getDevice",
@@ -19,6 +21,8 @@ func CurrentMappings() []Mapping {
 			URI:             ResourceURI("device", "{device}"),
 			GrantPermission: ToolGrant("get_device_info"),
 			Rationale:       "Parameterized device lookup by ID, hostname, or IP is exposed as a typed tool with a matching resource shape.",
+			ReadOnly:        true,
+			Idempotent:      true,
 		},
 		{
 			OperationID:     "getPolicyFile",
@@ -37,6 +41,7 @@ func CurrentMappings() []Mapping {
 	}
 
 	for _, endpoint := range readapi.ToolEndpoints() {
+		hints := endpoint.ToolHints()
 		rationale := "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
 		if endpoint.Confirm != "" {
 			rationale = "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token."
@@ -47,6 +52,9 @@ func CurrentMappings() []Mapping {
 			Name:            endpoint.ToolName,
 			GrantPermission: ToolGrant(endpoint.ToolName),
 			Rationale:       rationale,
+			ReadOnly:        hints.ReadOnly,
+			Destructive:     hints.Destructive,
+			Idempotent:      hints.Idempotent,
 			Confirmation:    endpoint.Confirm,
 		})
 	}
