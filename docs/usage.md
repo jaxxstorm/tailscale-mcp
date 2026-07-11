@@ -19,7 +19,7 @@ go build -o ts-mcp .
 You can also install with Homebrew:
 
 ```bash
-brew install jaxxstorm/tap/ts-mcp
+brew install jaxxstorm/tap/tailscale-mcp
 ```
 
 ## Configuration
