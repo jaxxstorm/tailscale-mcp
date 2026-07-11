@@ -13,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/alecthomas/kong"
 	"github.com/jaxxstorm/tailscale-mcp/internal/curatedtools"
@@ -26,6 +27,8 @@ import (
 	tsapi "tailscale.com/client/tailscale/v2"
 	_ "tailscale.com/feature/identityfederation"
 	_ "tailscale.com/feature/oauthkey"
+	"tailscale.com/hostinfo"
+	"tailscale.com/tailcfg"
 	"tailscale.com/tsnet"
 )
 
@@ -36,7 +39,7 @@ type CLI struct {
 	Hostname      string `env:"TS_HOSTNAME" default:"ts-mcp"`
 	Port          int    `env:"TS_PORT" default:"8080"`
 	AdvertiseTags string `env:"TS_ADVERTISE_TAGS" help:"Comma-separated Tailscale tags to advertise when minting tsnet auth keys from OAuth or federated credentials"`
-	ForceLogin    bool   `env:"TSNET_FORCE_LOGIN" default:"true" help:"Force tsnet to use the supplied startup credential even when local state exists"`
+	ForceLogin    bool   `env:"TSNET_FORCE_LOGIN" help:"Force tsnet to use the supplied startup credential even when local state exists"`
 	LocalCLI      bool   `env:"TAILSCALE_LOCAL_CLI" help:"Enable optional read-only tools that shell out to the local tailscale CLI"`
 	Debug         bool   `short:"d"`
 	Version       bool   `short:"v"`
@@ -44,6 +47,7 @@ type CLI struct {
 }
 
 const (
+	mcpServerName               = "ts-mcp"
 	streamableHTTPTransportName = "Streamable HTTP"
 	mcpEndpointPath             = "/mcp"
 	defaultLocalStreamableAddr  = "127.0.0.1:8080"
@@ -52,6 +56,7 @@ const (
 
 var buildVersion = "0.0.2"
 var logger *zap.Logger
+var registerTSNetBuildInfoOnce sync.Once
 
 type CredentialKind string
 
@@ -228,6 +233,68 @@ func parseAdvertiseTags(raw string) ([]string, error) {
 		tags = append(tags, tag)
 	}
 	return tags, nil
+}
+
+func tsnetStateDir(hostname string) string {
+	hostname = strings.TrimSpace(strings.ToLower(hostname))
+	if hostname == "" {
+		hostname = mcpServerName
+	}
+
+	var b strings.Builder
+	for _, r := range hostname {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r)
+		case r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == '-' || r == '_' || r == '.':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('-')
+		}
+	}
+	if b.Len() == 0 {
+		return "tsnet-" + mcpServerName
+	}
+	return "tsnet-" + b.String()
+}
+
+func tsnetZapLogf(log *zap.Logger, level zapcore.Level) func(format string, args ...any) {
+	if log == nil {
+		log = zap.NewNop()
+	}
+	return func(format string, args ...any) {
+		msg := fmt.Sprintf(format, args...)
+		if ce := log.Check(level, msg); ce != nil {
+			ce.Write(zap.String("component", "tsnet"))
+		}
+	}
+}
+
+func newTSNetServer(hostname string, advertiseTags []string, credential TailscaleCredential, debug bool) *tsnet.Server {
+	tsServer := &tsnet.Server{
+		Dir:           tsnetStateDir(hostname),
+		Hostname:      hostname,
+		AdvertiseTags: advertiseTags,
+		UserLogf:      tsnetZapLogf(logger, zapcore.InfoLevel),
+	}
+	if debug {
+		tsServer.Logf = tsnetZapLogf(logger, zapcore.DebugLevel)
+	}
+	credential.ConfigureTSNet(tsServer)
+	return tsServer
+}
+
+func registerTSNetBuildInfo() {
+	hostinfo.SetApp(mcpServerName)
+	registerTSNetBuildInfoOnce.Do(func() {
+		hostinfo.RegisterHostinfoNewHook(func(hi *tailcfg.Hostinfo) {
+			hi.App = mcpServerName
+			hi.IPNVersion = buildVersion
+			hi.OS = mcpServerName
+		})
+	})
 }
 
 type staticBearerAuth struct {
@@ -596,7 +663,7 @@ func main() {
 		logger.Fatal("Tailscale credential validation failed", zap.Error(err))
 	}
 
-	mcpServer := server.NewMCPServer("ts-mcp", buildVersion)
+	mcpServer := server.NewMCPServer(mcpServerName, buildVersion)
 
 	registerCoreMCP(mcpServer, tsAdminClient)
 	readapi.RegisterTools(mcpServer, readAPIClient, checkToolAccess)
@@ -623,11 +690,8 @@ func main() {
 		logger.Info("Forcing tsnet login with supplied startup credential", zap.String("env", "TSNET_FORCE_LOGIN"))
 	}
 
-	tsServer := &tsnet.Server{
-		Hostname:      cli.Hostname,
-		AdvertiseTags: advertiseTags,
-	}
-	credential.ConfigureTSNet(tsServer)
+	registerTSNetBuildInfo()
+	tsServer := newTSNetServer(cli.Hostname, advertiseTags, credential, cli.Debug)
 	defer tsServer.Close()
 
 	tsLn, err := tsServer.Listen("tcp", fmt.Sprintf(":%d", cli.Port))
