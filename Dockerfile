@@ -2,6 +2,8 @@
 
 FROM cgr.dev/chainguard/go:latest AS builder
 
+ARG VERSION=dev
+
 WORKDIR /src
 
 COPY go.mod go.sum ./
@@ -10,7 +12,7 @@ RUN go mod download
 # Copy the remaining project files
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o /src/tailscale-mcp .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-X main.buildVersion=${VERSION}" -o /src/tailscale-mcp .
 
 FROM cgr.dev/chainguard/static:latest
 

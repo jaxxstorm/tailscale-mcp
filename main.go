@@ -60,7 +60,7 @@ const (
 	tailscaleOAuthTokenEnv      = "TAILSCALE_OAUTH_TOKEN"
 )
 
-var buildVersion = "0.0.2"
+var buildVersion = "dev"
 var logger *zap.Logger
 var registerTSNetBuildInfoOnce sync.Once
 
