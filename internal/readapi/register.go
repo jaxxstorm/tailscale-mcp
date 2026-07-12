@@ -22,8 +22,13 @@ func withAccess[T any](ctx context.Context, item string, check AccessChecker, ca
 }
 
 func RegisterTools(mcpServer *server.MCPServer, client Client, check AccessChecker) {
+	var networkFlowLogs Endpoint
 	for _, endpoint := range ToolEndpoints() {
 		endpoint := endpoint
+		if endpoint.OperationID == "listNetworkFlowLogs" {
+			networkFlowLogs = endpoint
+			continue
+		}
 		options := []mcp.ToolOption{mcp.WithDescription(endpoint.Summary)}
 		options = append(options, ToolHintOptions(endpoint)...)
 		for _, param := range endpoint.Parameters {
@@ -55,6 +60,9 @@ func RegisterTools(mcpServer *server.MCPServer, client Client, check AccessCheck
 			}
 			return mcp.NewToolResultText(prettyJSON(data)), nil
 		})
+	}
+	if networkFlowLogs.OperationID != "" {
+		registerNetworkFlowLogTool(mcpServer, client, check, networkFlowLogs)
 	}
 }
 

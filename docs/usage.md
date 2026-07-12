@@ -257,6 +257,12 @@ Generated endpoint tools include MCP safety hints for clients that support mutat
 
 These hints are advisory metadata for MCP clients. Server-side enforcement remains authoritative: every tool and resource still requires the configured `jaxxstorm.com/cap/mcp` grant, and mutating tools still require the exact `confirm` token for the underlying OpenAPI operation.
 
+### Network Flow Logs
+
+`tailscale_list_network_flow_logs` returns network flow logs in chronological windows of at most five minutes so a busy tailnet cannot overwhelm an MCP client's context. For the first call, provide RFC3339 `start` and `end` timestamps. The response contains `logs`, the effective window `start` and `end`, and `nextCursor` when more of the requested range remains. Call the tool again with that value as `cursor` until `nextCursor` is absent.
+
+The tool remains read-only and requires the existing `tool:tailscale_list_network_flow_logs` grant.
+
 ### Curated Operator Tools
 
 Curated tools are task-oriented wrappers around one or more generated endpoint tools. They do not replace the generated `tailscale_<operation>` tools and are not counted separately in OpenAPI coverage. Each curated tool uses its own grant name matching the tool name.

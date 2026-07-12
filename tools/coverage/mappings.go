@@ -43,6 +43,9 @@ func CurrentMappings() []Mapping {
 	for _, endpoint := range readapi.ToolEndpoints() {
 		hints := endpoint.ToolHints()
 		rationale := "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar."
+		if endpoint.OperationID == "listNetworkFlowLogs" {
+			rationale = "Network flow logs are exposed through a bounded, cursor-based MCP tool to keep responses within client context limits."
+		}
 		if endpoint.Confirm != "" {
 			rationale = "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token."
 		}

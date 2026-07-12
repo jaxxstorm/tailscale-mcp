@@ -761,7 +761,7 @@
       "mcpName": "tailscale_list_network_flow_logs",
       "grantPermission": "tool:tailscale_list_network_flow_logs",
       "status": "implemented",
-      "rationale": "Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar.",
+      "rationale": "Network flow logs are exposed through a bounded, cursor-based MCP tool to keep responses within client context limits.",
       "readOnly": true,
       "idempotent": true
     },
