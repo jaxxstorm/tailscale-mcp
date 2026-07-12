@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"go.uber.org/zap"
@@ -44,12 +45,128 @@ func TestTSNetStateDirUsesHostname(t *testing.T) {
 	}
 }
 
+func TestResolveTSNetState(t *testing.T) {
+	tests := []struct {
+		name          string
+		raw           string
+		hostname      string
+		wantDir       string
+		wantStorePath string
+		wantLocation  string
+	}{
+		{
+			name:         "empty uses current hostname directory default",
+			hostname:     "ops-mcp",
+			wantDir:      "tsnet-ops-mcp",
+			wantLocation: "tsnet-ops-mcp/tailscaled.state",
+		},
+		{
+			name:         "file scheme without path uses current default",
+			raw:          "file://",
+			hostname:     "ops-mcp",
+			wantDir:      "tsnet-ops-mcp",
+			wantLocation: "tsnet-ops-mcp/tailscaled.state",
+		},
+		{
+			name:         "file scheme with directory",
+			raw:          "file:///var/lib/tailscale-mcp",
+			hostname:     "ops-mcp",
+			wantDir:      "/var/lib/tailscale-mcp",
+			wantLocation: "/var/lib/tailscale-mcp/tailscaled.state",
+		},
+		{
+			name:          "kubernetes url scheme",
+			raw:           "kube://tailscale-mcp-state",
+			hostname:      "ops-mcp",
+			wantDir:       "tsnet-ops-mcp",
+			wantStorePath: "kube:tailscale-mcp-state",
+			wantLocation:  "Kubernetes Secret tailscale-mcp-state",
+		},
+		{
+			name:          "kubernetes native store prefix",
+			raw:           "kube:tailscale-mcp-state",
+			hostname:      "ops-mcp",
+			wantDir:       "tsnet-ops-mcp",
+			wantStorePath: "kube:tailscale-mcp-state",
+			wantLocation:  "Kubernetes Secret tailscale-mcp-state",
+		},
+		{
+			name:          "aws structured url scheme",
+			raw:           "aws://us-east-1/123456789012/parameter/tailscale/mcp?kmsKey=alias/state",
+			hostname:      "ops-mcp",
+			wantDir:       "tsnet-ops-mcp",
+			wantStorePath: "arn:aws:ssm:us-east-1:123456789012:parameter/tailscale/mcp?kmsKey=alias/state",
+			wantLocation:  "AWS SSM Parameter Store arn:aws:ssm:us-east-1:123456789012:parameter/tailscale/mcp?kmsKey=alias/state",
+		},
+		{
+			name:          "aws arn url scheme",
+			raw:           "aws://arn:aws:ssm:us-east-1:123456789012:parameter/tailscale/mcp",
+			hostname:      "ops-mcp",
+			wantDir:       "tsnet-ops-mcp",
+			wantStorePath: "arn:aws:ssm:us-east-1:123456789012:parameter/tailscale/mcp",
+			wantLocation:  "AWS SSM Parameter Store arn:aws:ssm:us-east-1:123456789012:parameter/tailscale/mcp",
+		},
+		{
+			name:          "native aws arn prefix",
+			raw:           "arn:aws:ssm:us-west-2:123456789012:parameter/tailscale/mcp",
+			hostname:      "ops-mcp",
+			wantDir:       "tsnet-ops-mcp",
+			wantStorePath: "arn:aws:ssm:us-west-2:123456789012:parameter/tailscale/mcp",
+			wantLocation:  "AWS SSM Parameter Store arn:aws:ssm:us-west-2:123456789012:parameter/tailscale/mcp",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := resolveTSNetState(tt.raw, tt.hostname)
+			if err != nil {
+				t.Fatalf("resolveTSNetState() error = %v", err)
+			}
+			if got.Dir != tt.wantDir {
+				t.Fatalf("Dir = %q, want %q", got.Dir, tt.wantDir)
+			}
+			if got.StorePath != tt.wantStorePath {
+				t.Fatalf("StorePath = %q, want %q", got.StorePath, tt.wantStorePath)
+			}
+			if !strings.Contains(got.Description, tt.wantLocation) {
+				t.Fatalf("Description = %q, want to contain %q", got.Description, tt.wantLocation)
+			}
+		})
+	}
+}
+
+func TestResolveTSNetStateRejectsInvalidInput(t *testing.T) {
+	tests := []string{
+		"file:///",
+		"kube://",
+		"aws://",
+		"aws://us-east-1/123456789012",
+		"aws://us-east-1/123456789012/not-parameter/tailscale/mcp",
+		"consul://tailscale/state",
+	}
+
+	for _, raw := range tests {
+		t.Run(raw, func(t *testing.T) {
+			if _, err := resolveTSNetState(raw, "ops-mcp"); err == nil {
+				t.Fatal("resolveTSNetState() error = nil, want error")
+			}
+		})
+	}
+}
+
 func TestNewTSNetServerPreservesStartupConfiguration(t *testing.T) {
 	logger = zap.NewNop()
 	credential := TailscaleCredential{Kind: CredentialOAuth, ClientID: "cid", ClientSecret: "secret"}
 	tags := []string{"tag:mcp-server"}
+	state, err := resolveTSNetState("", "ops-mcp")
+	if err != nil {
+		t.Fatalf("resolveTSNetState() error = %v", err)
+	}
 
-	tsServer := newTSNetServer("ops-mcp", tags, credential, false)
+	tsServer, err := newTSNetServer("ops-mcp", tags, credential, false, state)
+	if err != nil {
+		t.Fatalf("newTSNetServer() error = %v", err)
+	}
 
 	if tsServer.Dir != "tsnet-ops-mcp" {
 		t.Fatalf("Dir = %q, want %q", tsServer.Dir, "tsnet-ops-mcp")
@@ -73,7 +190,14 @@ func TestNewTSNetServerPreservesStartupConfiguration(t *testing.T) {
 
 func TestNewTSNetServerConfiguresDebugLogf(t *testing.T) {
 	logger = zap.NewNop()
-	tsServer := newTSNetServer("ops-mcp", nil, TailscaleCredential{}, true)
+	state, err := resolveTSNetState("", "ops-mcp")
+	if err != nil {
+		t.Fatalf("resolveTSNetState() error = %v", err)
+	}
+	tsServer, err := newTSNetServer("ops-mcp", nil, TailscaleCredential{}, true, state)
+	if err != nil {
+		t.Fatalf("newTSNetServer() error = %v", err)
+	}
 
 	if tsServer.UserLogf == nil {
 		t.Fatal("UserLogf is nil, want application logger")

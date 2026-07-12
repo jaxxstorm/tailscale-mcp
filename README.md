@@ -8,6 +8,7 @@ An MCP (Model Context Protocol) server for Tailscale, enabling detailed queries 
 * **Comprehensive Tailscale Integration**: Full mapped coverage of the vendored Tailscale OpenAPI snapshot
 * **OAuth Grants Authorization**: Fine-grained MCP access control with `jaxxstorm.com/cap/mcp`
 * **Single Credential Startup**: Uses `TAILSCALE_OAUTH_TOKEN` for Admin API access and tsnet startup
+* **Configurable tsnet State**: Stores tsnet state on the filesystem by default, with optional Kubernetes Secret or AWS SSM state stores
 * **Legacy stdio Compatibility**: Deprecated stdio mode remains available for older local clients
 
 ## Quick Start

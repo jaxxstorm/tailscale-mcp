@@ -10,7 +10,9 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -28,6 +30,9 @@ import (
 	_ "tailscale.com/feature/identityfederation"
 	_ "tailscale.com/feature/oauthkey"
 	"tailscale.com/hostinfo"
+	ipnstore "tailscale.com/ipn/store"
+	_ "tailscale.com/ipn/store/awsstore"
+	_ "tailscale.com/ipn/store/kubestore"
 	"tailscale.com/tailcfg"
 	"tailscale.com/tsnet"
 )
@@ -39,6 +44,7 @@ type CLI struct {
 	Hostname      string `env:"TS_HOSTNAME" default:"ts-mcp"`
 	Port          int    `env:"TS_PORT" default:"8080"`
 	AdvertiseTags string `env:"TS_ADVERTISE_TAGS" help:"Comma-separated Tailscale tags to advertise when minting tsnet auth keys from OAuth or federated credentials"`
+	State         string `env:"TSNET_STATE" help:"tsnet state location: empty or file:// uses ./tsnet-<hostname>/tailscaled.state; file://<dir> uses <dir>/tailscaled.state; kube://<secret> uses a Kubernetes Secret; aws://<region>/<account>/parameter/<name> or aws://arn:aws:ssm:... uses AWS SSM"`
 	ForceLogin    bool   `env:"TSNET_FORCE_LOGIN" help:"Force tsnet to use the supplied startup credential even when local state exists"`
 	LocalCLI      bool   `env:"TAILSCALE_LOCAL_CLI" help:"Enable optional read-only tools that shell out to the local tailscale CLI"`
 	Debug         bool   `short:"d"`
@@ -260,6 +266,118 @@ func tsnetStateDir(hostname string) string {
 	return "tsnet-" + b.String()
 }
 
+type tsnetStateConfig struct {
+	Raw         string
+	Dir         string
+	StorePath   string
+	Description string
+}
+
+func resolveTSNetState(raw, hostname string) (tsnetStateConfig, error) {
+	raw = strings.TrimSpace(raw)
+	defaultDir := tsnetStateDir(hostname)
+	if raw == "" || raw == "file://" {
+		return tsnetStateConfig{
+			Raw:         raw,
+			Dir:         defaultDir,
+			Description: describeTSNetStateFile(defaultDir),
+		}, nil
+	}
+
+	if strings.HasPrefix(raw, "file://") {
+		dir := strings.TrimPrefix(raw, "file://")
+		if strings.TrimSpace(dir) == "" || filepath.Clean(dir) == string(filepath.Separator) {
+			return tsnetStateConfig{}, errors.New("file:// state requires a directory path or use file:// for the default")
+		}
+		return tsnetStateConfig{
+			Raw:         raw,
+			Dir:         dir,
+			Description: describeTSNetStateFile(dir),
+		}, nil
+	}
+
+	storePath, err := normalizeTSNetStateStore(raw)
+	if err != nil {
+		return tsnetStateConfig{}, err
+	}
+	return tsnetStateConfig{
+		Raw:         raw,
+		Dir:         defaultDir,
+		StorePath:   storePath,
+		Description: describeTSNetStateStore(storePath),
+	}, nil
+}
+
+func normalizeTSNetStateStore(raw string) (string, error) {
+	switch {
+	case strings.HasPrefix(raw, "kube://"):
+		secret := strings.TrimPrefix(raw, "kube://")
+		if strings.TrimSpace(secret) == "" {
+			return "", errors.New("kube:// state requires a Kubernetes Secret name")
+		}
+		return "kube:" + secret, nil
+	case strings.HasPrefix(raw, "kube:"):
+		if strings.TrimSpace(strings.TrimPrefix(raw, "kube:")) == "" {
+			return "", errors.New("kube: state requires a Kubernetes Secret name")
+		}
+		return raw, nil
+	case strings.HasPrefix(raw, "aws://"):
+		return normalizeAWSState(raw)
+	case strings.HasPrefix(raw, "arn:aws:ssm:"):
+		return raw, nil
+	case strings.HasPrefix(raw, "mem:"):
+		return raw, nil
+	default:
+		return "", fmt.Errorf("unsupported TSNET_STATE %q; use file://, kube://, aws://, kube:, arn:aws:ssm:, or mem:", raw)
+	}
+}
+
+func normalizeAWSState(raw string) (string, error) {
+	rest := strings.TrimPrefix(raw, "aws://")
+	if strings.HasPrefix(rest, "arn:aws:ssm:") {
+		if strings.TrimSpace(rest) == "" {
+			return "", errors.New("aws:// state requires an AWS SSM ARN")
+		}
+		return rest, nil
+	}
+
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("invalid aws:// state: %w", err)
+	}
+	region := u.Host
+	parts := strings.SplitN(strings.TrimPrefix(u.Path, "/"), "/", 2)
+	if region == "" || len(parts) != 2 || parts[0] == "" || !strings.HasPrefix(parts[1], "parameter/") {
+		return "", errors.New("aws:// state must be aws://<region>/<account-id>/parameter/<name> or aws://arn:aws:ssm:<region>:<account-id>:parameter/<name>")
+	}
+	arn := fmt.Sprintf("arn:aws:ssm:%s:%s:%s", region, parts[0], parts[1])
+	if u.RawQuery != "" {
+		arn += "?" + u.RawQuery
+	}
+	return arn, nil
+}
+
+func describeTSNetStateFile(dir string) string {
+	stateFile := filepath.Join(dir, "tailscaled.state")
+	if abs, err := filepath.Abs(stateFile); err == nil {
+		return "filesystem state file " + abs
+	}
+	return "filesystem state file " + stateFile
+}
+
+func describeTSNetStateStore(storePath string) string {
+	switch {
+	case strings.HasPrefix(storePath, "kube:"):
+		return "Kubernetes Secret " + strings.TrimPrefix(storePath, "kube:")
+	case strings.HasPrefix(storePath, "arn:aws:ssm:"):
+		return "AWS SSM Parameter Store " + storePath
+	case strings.HasPrefix(storePath, "mem:"):
+		return "in-memory ephemeral tsnet state"
+	default:
+		return "tsnet state store " + storePath
+	}
+}
+
 func tsnetZapLogf(log *zap.Logger, level zapcore.Level) func(format string, args ...any) {
 	if log == nil {
 		log = zap.NewNop()
@@ -272,9 +390,9 @@ func tsnetZapLogf(log *zap.Logger, level zapcore.Level) func(format string, args
 	}
 }
 
-func newTSNetServer(hostname string, advertiseTags []string, credential TailscaleCredential, debug bool) *tsnet.Server {
+func newTSNetServer(hostname string, advertiseTags []string, credential TailscaleCredential, debug bool, state tsnetStateConfig) (*tsnet.Server, error) {
 	tsServer := &tsnet.Server{
-		Dir:           tsnetStateDir(hostname),
+		Dir:           state.Dir,
 		Hostname:      hostname,
 		AdvertiseTags: advertiseTags,
 		UserLogf:      tsnetZapLogf(logger, zapcore.InfoLevel),
@@ -282,8 +400,15 @@ func newTSNetServer(hostname string, advertiseTags []string, credential Tailscal
 	if debug {
 		tsServer.Logf = tsnetZapLogf(logger, zapcore.DebugLevel)
 	}
+	if state.StorePath != "" {
+		store, err := ipnstore.New(tsnetZapLogf(logger, zapcore.InfoLevel), state.StorePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to configure tsnet state store %q: %w", state.StorePath, err)
+		}
+		tsServer.Store = store
+	}
 	credential.ConfigureTSNet(tsServer)
-	return tsServer
+	return tsServer, nil
 }
 
 func registerTSNetBuildInfo() {
@@ -643,6 +768,10 @@ func main() {
 	if err != nil {
 		logger.Fatal("Invalid Tailscale advertise tags", zap.Error(err))
 	}
+	stateConfig, err := resolveTSNetState(cli.State, cli.Hostname)
+	if err != nil {
+		logger.Fatal("Invalid tsnet state configuration", zap.Error(err), zap.String("env", "TSNET_STATE"))
+	}
 	if credential.RequiresTSNetAdvertiseTags() && len(advertiseTags) == 0 {
 		logger.Fatal("Tailscale credential requires advertised tags for tsnet startup",
 			zap.String("env", "TS_ADVERTISE_TAGS"),
@@ -650,6 +779,11 @@ func main() {
 		)
 	}
 	logger.Info("Configured Tailscale credential", zap.String("credential_type", string(credential.Kind)))
+	logger.Info("Configured tsnet state",
+		zap.String("location", stateConfig.Description),
+		zap.String("dir", stateConfig.Dir),
+		zap.String("store", stateConfig.StorePath),
+	)
 
 	tsAdminClient := &tsapi.Client{
 		Tailnet: cli.Tailnet,
@@ -691,7 +825,10 @@ func main() {
 	}
 
 	registerTSNetBuildInfo()
-	tsServer := newTSNetServer(cli.Hostname, advertiseTags, credential, cli.Debug)
+	tsServer, err := newTSNetServer(cli.Hostname, advertiseTags, credential, cli.Debug, stateConfig)
+	if err != nil {
+		logger.Fatal("Failed to configure tsnet server", zap.Error(err))
+	}
 	defer tsServer.Close()
 
 	tsLn, err := tsServer.Listen("tcp", fmt.Sprintf(":%d", cli.Port))

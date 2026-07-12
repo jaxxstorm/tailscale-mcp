@@ -37,6 +37,7 @@ Optional environment variables:
 ```bash
 export TS_HOSTNAME="ts-mcp"
 export TS_PORT="8080"
+export TSNET_STATE="file://"
 ```
 
 `TS_ADVERTISE_TAGS` is required when `TAILSCALE_OAUTH_TOKEN` is an OAuth client secret or federated credential because tsnet mints a tagged node auth key during startup. The OAuth client or federated credential must be allowed to create auth keys for the advertised tag.
@@ -47,7 +48,64 @@ Command line options:
 * `--version` / `-v`: Show version information
 * `--oauth-client-id`: OAuth client ID to use when `TAILSCALE_OAUTH_TOKEN` is a raw `tskey-client-*` secret
 * `--advertise-tags`: Comma-separated Tailscale tags to advertise when minting tsnet auth keys from OAuth or federated credentials
+* `--state`: tsnet state location. Same as `TSNET_STATE`
 * `--stdio`: Use deprecated stdio compatibility mode instead of Streamable HTTP
+
+## tsnet State
+
+`TSNET_STATE` controls where the embedded tsnet node stores its Tailscale identity and local state.
+
+If `TSNET_STATE` is unset, the default is unchanged from earlier releases: state is stored in a hostname-specific directory under the process working directory. With the default `TS_HOSTNAME=ts-mcp`, the state file is:
+
+```text
+./tsnet-ts-mcp/tailscaled.state
+```
+
+The server logs the resolved state location at startup as `Configured tsnet state`, including the absolute filesystem path when state is file-backed.
+
+Supported values:
+
+* `file://`: use the default hostname-specific directory, such as `./tsnet-ts-mcp/tailscaled.state`
+* `file:///var/lib/tailscale-mcp`: store filesystem state at `/var/lib/tailscale-mcp/tailscaled.state`
+* `kube://tailscale-mcp-state`: store state in the Kubernetes Secret `tailscale-mcp-state`
+* `aws://us-east-1/123456789012/parameter/tailscale/mcp`: store state in AWS SSM Parameter Store
+* `aws://arn:aws:ssm:us-east-1:123456789012:parameter/tailscale/mcp`: store state in the given AWS SSM ARN
+
+The native Tailscale store prefixes are also accepted for compatibility: `kube:<secret>`, `arn:aws:ssm:...`, and `mem:`.
+
+Kubernetes Secret state requires the pod service account to have `get` and `update` on the state Secret. Grant `patch` and `create` as well so the store can efficiently update or create the Secret. Optional Kubernetes Events require `get`, `create`, and `patch` on `events`.
+
+Example Kubernetes RBAC:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: tailscale-mcp-state
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["tailscale-mcp-state"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "create", "patch"]
+```
+
+When using Kubernetes state:
+
+```bash
+export TSNET_STATE="kube://tailscale-mcp-state"
+```
+
+When using AWS SSM state, the workload must have AWS credentials that can read and write the target parameter. If `kmsKey` is provided, the workload also needs permission to use that key:
+
+```bash
+export TSNET_STATE="aws://us-east-1/123456789012/parameter/tailscale/mcp?kmsKey=alias/tailscale-state"
+```
 
 ## Credentials
 
