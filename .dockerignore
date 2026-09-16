@@ -1,0 +1,13 @@
+# Only build inputs enter the context, never local credentials or runtime state.
+**
+!go.mod
+!go.sum
+!*.go
+!internal/
+!internal/**/
+!internal/**/*.go
+
+# Defense in depth for runtime directories anywhere in the source tree.
+**/tsnet-*/**
+**/tailscaled.state
+**/tailscaled.log*

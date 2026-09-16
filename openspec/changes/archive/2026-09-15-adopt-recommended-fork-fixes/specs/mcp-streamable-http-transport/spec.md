@@ -1,8 +1,4 @@
-## Purpose
-
-Define Streamable HTTP as the primary MCP transport and preserve stdio only as deprecated compatibility.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Streamable HTTP is the primary transport
 The system SHALL expose MCP over Streamable HTTP as the primary supported transport for Tailscale tailnet access and explicitly enabled localhost access.
@@ -49,35 +45,6 @@ The system SHALL keep stdio mode available for compatibility while marking it as
 - **WHEN** an operator reviews setup documentation
 - **THEN** Streamable HTTP is recommended and stdio is identified as deprecated compatibility with explicit local grants
 
-### Requirement: SSE-era guidance is removed from operator documentation
-The system SHALL NOT direct new operators to configure SSE as the MCP transport.
-
-#### Scenario: Operator reads README transport guidance
-- **WHEN** the README describes remote MCP access
-- **THEN** it references Streamable HTTP and the `/mcp` endpoint without recommending SSE setup
-
-### Requirement: tsnet Streamable HTTP uses server-specific state
-The system SHALL configure tsnet Streamable HTTP startup with a deterministic state directory specific to the configured server hostname, rather than relying on the shared tsnet default state directory.
-
-#### Scenario: Server starts with default hostname
-- **WHEN** the server starts with the default hostname
-- **THEN** the tsnet server uses a state directory specific to that hostname
-
-#### Scenario: Server starts with custom hostname
-- **WHEN** the server starts with a custom hostname
-- **THEN** the tsnet server uses a different state directory derived from that custom hostname
-
-#### Scenario: Multiple hostnames run on the same host
-- **WHEN** two MCP servers start with different configured hostnames on the same machine
-- **THEN** their tsnet state directories are different
-
-### Requirement: tsnet startup registers build information
-The system SHALL register application build information with Tailscale before serving Streamable HTTP over the tsnet listener.
-
-#### Scenario: Tailnet Streamable HTTP startup initializes tsnet
-- **WHEN** the server initializes tsnet for Streamable HTTP
-- **THEN** build information for the running MCP server version is registered before the tsnet listener serves requests
-
 ### Requirement: MCP transport surface remains unchanged
 The system SHALL preserve `/mcp`, existing tool and resource identities, and backend operation semantics while introducing explicit localhost opt-in, optional TLS, and corrected authorization/error handling. It SHALL NOT add named profile URLs or remove curated wrappers.
 
@@ -93,24 +60,7 @@ The system SHALL preserve `/mcp`, existing tool and resource identities, and bac
 - **WHEN** operators inspect MCP tools and resources backed by the Tailscale OpenAPI surface
 - **THEN** existing names, exact grant identities, read-only and mutating semantics, pagination, confirmation tokens, and structured API error mapping are preserved
 
-### Requirement: tsnet logs use application logging
-The system SHALL route tsnet Streamable HTTP startup and lifecycle logs through the same application logger and output format used by the MCP server.
-
-#### Scenario: tsnet emits user-visible startup logs
-- **WHEN** tsnet emits user-visible startup or lifecycle log messages during Streamable HTTP startup
-- **THEN** those messages are written through the application logger with the same output format as other server logs
-
-#### Scenario: Server starts without debug logging
-- **WHEN** the server starts without debug logging enabled
-- **THEN** normal tsnet user-visible logs use the application logger and verbose backend tsnet logs remain quiet
-
-#### Scenario: Server starts with debug logging
-- **WHEN** the server starts with debug logging enabled
-- **THEN** verbose backend tsnet logs are also routed through the application logger at debug level
-
-#### Scenario: Stdio mode is selected
-- **WHEN** the server starts with the stdio flag
-- **THEN** stdio behavior remains unchanged and no tsnet logger setup is required
+## ADDED Requirements
 
 ### Requirement: Loopback access is separately enabled and bounded to localhost
 The system SHALL require both `--local-http` / `TS_MCP_LOCAL_HTTP` and an explicit non-empty `--local-grants` / `TS_MCP_LOCAL_GRANTS` capability to open loopback HTTP. It SHALL bind only `127.0.0.1`, use `--local-port` / `TS_MCP_LOCAL_PORT` with default 8080, and reject malformed local grant configuration or invalid ports before serving. Documentation SHALL state that all processes able to connect receive the same configured grant.
