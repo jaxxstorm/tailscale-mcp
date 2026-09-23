@@ -1,1 +1,7 @@
 bin/
+
+# Local tsnet identity, certificates, and logs must never be committed.
+tsnet-*/
+tailscaled.state
+tailscaled.log*
+dist/
