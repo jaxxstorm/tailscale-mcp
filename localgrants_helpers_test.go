@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -66,21 +67,25 @@ func TestLocalHostProtectionSDKStack(t *testing.T) {
 	handler := strictOriginMiddleware(bodyLimitMiddleware(localGrantMiddleware(sdk, caps), 0))
 	s := httptest.NewServer(handler)
 	defer s.Close()
-	for _, origin := range []string{"", "http://attacker.example"} {
-		req, _ := http.NewRequest("POST", s.URL+"/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`))
-		req.Host = "attacker.example"
-		if origin != "" {
-			req.Header.Set("Origin", origin)
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json, text/event-stream")
-		res, err := s.Client().Do(req)
-		if err != nil {
-			t.Fatal(err)
-		}
-		res.Body.Close()
-		if res.StatusCode != http.StatusForbidden {
-			t.Fatalf("origin %q: status %d", origin, res.StatusCode)
+	port := s.Listener.Addr().(*net.TCPAddr).Port
+	wrongPort := port%65535 + 1
+	for _, host := range []string{"attacker.example", "localhost", "127.0.0.1", "[::1]", net.JoinHostPort("localhost", strconv.Itoa(wrongPort)), net.JoinHostPort("127.0.0.1", strconv.Itoa(wrongPort)), net.JoinHostPort("::1", strconv.Itoa(wrongPort))} {
+		for _, origin := range []string{"", "http://" + host} {
+			req, _ := http.NewRequest("POST", s.URL+"/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`))
+			req.Host = host
+			if origin != "" {
+				req.Header.Set("Origin", origin)
+			}
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "application/json, text/event-stream")
+			res, err := s.Client().Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			res.Body.Close()
+			if res.StatusCode != http.StatusForbidden {
+				t.Fatalf("host %q origin %q: status %d", host, origin, res.StatusCode)
+			}
 		}
 	}
 	// A real loopback initialization still reaches the SDK.
@@ -98,6 +103,53 @@ func TestLocalHostProtectionSDKStack(t *testing.T) {
 	}
 }
 
+func TestLocalHostListenerPort(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		host    string
+		local   any
+		allowed bool
+	}{
+		{"localhost", "localhost:8080", &net.TCPAddr{Port: 8080}, true},
+		{"IPv4", "127.0.0.1:8080", &net.TCPAddr{Port: 8080}, true},
+		{"IPv6", "[::1]:8080", &net.TCPAddr{Port: 8080}, true},
+		{"custom port", "localhost:9090", &net.TCPAddr{Port: 9090}, true},
+		{"implicit HTTP port", "localhost", &net.TCPAddr{Port: 80}, true},
+		{"explicit HTTP port", "localhost:80", &net.TCPAddr{Port: 80}, true},
+		{"wrong port", "localhost:9090", &net.TCPAddr{Port: 8080}, false},
+		{"omitted port", "localhost", &net.TCPAddr{Port: 8080}, false},
+		{"wrong default port", "localhost:80", &net.TCPAddr{Port: 8080}, false},
+		{"missing local address", "localhost:8080", nil, false},
+		{"nil local address", "localhost:8080", (*net.TCPAddr)(nil), false},
+		{"non-TCP local address", "localhost:8080", &net.UnixAddr{Name: "local"}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			called := false
+			h := localGrantMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				called = true
+				w.WriteHeader(http.StatusNoContent)
+			}), &MCPCapability{Tools: []string{"*"}})
+			r := httptest.NewRequest("POST", "http://"+tc.host+"/mcp", nil)
+			r.RemoteAddr = "127.0.0.1:12345"
+			if tc.local != nil {
+				r = r.WithContext(context.WithValue(r.Context(), http.LocalAddrContextKey, tc.local))
+			}
+			r.Header.Set("Forwarded", "host="+tc.host)
+			r.Header.Set("X-Forwarded-Host", tc.host)
+			r.Header.Set("X-Forwarded-Port", "8080")
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+			want := http.StatusForbidden
+			if tc.allowed {
+				want = http.StatusNoContent
+			}
+			if w.Code != want || called != tc.allowed {
+				t.Fatalf("status=%d handler called=%v; want status=%d called=%v", w.Code, called, want, tc.allowed)
+			}
+		})
+	}
+}
+
 func TestLocalGrantsIgnoreSpoofedHeadersAndContext(t *testing.T) {
 	caps := &MCPCapability{Tools: []string{"get_device_info"}}
 	h := localGrantMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -108,6 +160,7 @@ func TestLocalGrantsIgnoreSpoofedHeadersAndContext(t *testing.T) {
 		w.WriteHeader(204)
 	}), caps)
 	r := httptest.NewRequest("POST", "http://localhost:8080/mcp", nil)
+	r = r.WithContext(context.WithValue(r.Context(), http.LocalAddrContextKey, &net.TCPAddr{Port: 8080}))
 	r.RemoteAddr = "127.0.0.1:12345"
 	r.Header.Set("X-Tailscale-User", "admin")
 	r.Header.Set("X-Tailscale-Capabilities", `{"tools":["*"]}`)

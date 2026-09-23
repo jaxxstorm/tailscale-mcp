@@ -22,4 +22,4 @@ jobs:
       - name: Test and validate API coverage
         run: make verify
       - name: Check generated coverage is current
-        run: git diff --exit-code -- coverage/mcp-coverage.json coverage/mcp-coverage.md coverage/parity-backlog.md
+        run: git diff --exit-code -- coverage/mcp-coverage.json coverage/mcp-coverage.md coverage/mcp-coverage-diff.md coverage/parity-backlog.md

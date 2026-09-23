@@ -242,7 +242,7 @@ func strictOriginMiddleware(next http.Handler) http.Handler {
 }
 
 // bodyLimitMiddleware consumes a bounded body before any SDK dispatch. The read
-// deadline is a connection deadline, not a request-context or stream deadline.
+// deadline bounds only body ingestion (the connection on HTTP/1, stream on HTTP/2).
 func bodyLimitMiddleware(next http.Handler, timeout time.Duration) http.Handler {
 	if timeout <= 0 {
 		timeout = mcpBodyReadTimeout
@@ -258,7 +258,10 @@ func bodyLimitMiddleware(next http.Handler, timeout time.Duration) http.Handler 
 			return
 		}
 		controller := http.NewResponseController(w)
-		if err := controller.SetReadDeadline(time.Now().Add(timeout)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		if err := controller.SetReadDeadline(time.Now().Add(timeout)); err != nil {
+			// Fail closed if a transport or wrapper cannot bound reads. Closing
+			// the HTTP/1 connection also prevents net/http from draining the body.
+			w.Header().Set("Connection", "close")
 			http.Error(w, "cannot bound request body read", http.StatusInternalServerError)
 			return
 		}
@@ -279,7 +282,7 @@ func bodyLimitMiddleware(next http.Handler, timeout time.Duration) http.Handler 
 			http.Error(w, "invalid request body", status)
 			return
 		}
-		if clearErr != nil && !errors.Is(clearErr, http.ErrNotSupported) {
+		if clearErr != nil {
 			http.Error(w, "cannot clear request body deadline", http.StatusInternalServerError)
 			return
 		}

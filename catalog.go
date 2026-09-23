@@ -25,6 +25,7 @@ func newConfiguredMCPServer(tsClient *tsapi.Client, readClient readapi.Client, l
 	}
 	check := toolAccessChecker(catalog)
 	s := server.NewMCPServer(mcpServerName, buildVersion,
+		server.WithInputSchemaValidation(),
 		server.WithToolFilter(func(ctx context.Context, tools []mcp.Tool) []mcp.Tool {
 			allowed := make([]mcp.Tool, 0, len(tools))
 			for _, tool := range tools {

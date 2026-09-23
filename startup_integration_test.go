@@ -107,9 +107,11 @@ func TestStartupIntegrationProcess(t *testing.T) {
 		os.Exit(0)
 	}
 	var apiCalls, validations atomic.Int64
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	http.DefaultTransport = credentialRoundTripFunc(func(r *http.Request) (*http.Response, error) {
 		body := "{}"
-		if mode != "stdio" {
+		if mode != "stdio" && mode != "stdio-context" {
 			panic("offline startup attempted HTTP: " + r.URL.String())
 		}
 		switch {
@@ -122,6 +124,9 @@ func TestStartupIntegrationProcess(t *testing.T) {
 			}
 		case (r.Method == "GET" || r.Method == "POST") && r.URL.Path == "/api/v2/tailnet/test/dns/configuration":
 			apiCalls.Add(1)
+			if mode == "stdio-context" {
+				cancel()
+			}
 		default:
 			panic("unexpected startup API request: " + r.Method + " " + r.URL.String())
 		}
@@ -133,7 +138,16 @@ func TestStartupIntegrationProcess(t *testing.T) {
 			break
 		}
 	}
-	main()
+	if mode == "stdio-context" {
+		var cli CLI
+		kong.Parse(&cli)
+		initLogger(false)
+		if err := run(ctx, cli); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		main()
+	}
 	if mode == "stdio" && validations.Load() != 1 {
 		t.Fatalf("startup validation calls=%d, want 1", validations.Load())
 	}
@@ -602,5 +616,61 @@ func TestStartupIntegrationSignals(t *testing.T) {
 	cmd, stderr := startupCommand(t, "serve-failure")
 	if err := cmd.Run(); err == nil || !strings.Contains(stderr.String(), "startup injected accept failure") {
 		t.Fatalf("unexpected serving failure exit: %v %s", err, stderr)
+	}
+}
+
+func TestStartupIntegrationStdioCancellationWithOpenInput(t *testing.T) {
+	for _, cause := range []string{"context", "interrupt", "terminate"} {
+		t.Run(cause, func(t *testing.T) {
+			mode := "stdio"
+			if cause == "context" {
+				mode = "stdio-context"
+			}
+			cmd, stderr := startupCommand(t, mode, "--stdio", "--tailnet=test", "--credential=test-only-token", `--local-grants={"tools":["read:*"]}`)
+			input, err := cmd.StdinPipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer input.Close()
+			output, err := cmd.StdoutPipe()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := cmd.Start(); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := fmt.Fprintln(input, `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"shutdown-test","version":"1"}}}`); err != nil {
+				t.Fatal(err)
+			}
+			var response map[string]json.RawMessage
+			if err := json.NewDecoder(output).Decode(&response); err != nil || response["result"] == nil {
+				t.Fatalf("initialize: %v %s", err, response)
+			}
+			if cause == "context" {
+				// The fake API cancels run's context, without delivering a signal.
+				_, err = fmt.Fprintln(input, `{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"tailscale_get_dns_configuration","arguments":{}}}`)
+			} else {
+				sig := os.Interrupt
+				if cause == "terminate" {
+					sig = syscall.SIGTERM
+				}
+				err = cmd.Process.Signal(sig)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			done := make(chan error, 1)
+			go func() { done <- cmd.Wait() }()
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Fatalf("stdio shutdown: %v %s", err, stderr)
+				}
+			case <-time.After(5 * time.Second):
+				_ = cmd.Process.Kill()
+				<-done
+				t.Fatalf("stdio shutdown hung with stdin open: %s", stderr)
+			}
+		})
 	}
 }

@@ -799,7 +799,11 @@ func run(ctx context.Context, cli CLI) (retErr error) {
 			zap.String("recommended_endpoint", mcpEndpointPath),
 		)
 		logger.Info("Starting deprecated MCP stdio transport")
-		return server.ServeStdio(mcpServer, server.WithStdioContextFunc(stdioContextFunc(localGrants)))
+		stdio := server.NewStdioServer(mcpServer)
+		stdio.SetContextFunc(stdioContextFunc(localGrants))
+		stdioCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		return stdio.Listen(stdioCtx, os.Stdin, os.Stdout)
 	}
 	if err := ctx.Err(); err != nil {
 		return err

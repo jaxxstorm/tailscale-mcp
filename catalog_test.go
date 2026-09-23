@@ -205,6 +205,55 @@ func TestCoreInvalidDeviceAndDirectDenials(t *testing.T) {
 	}
 }
 
+func TestConfiguredInputSchemaValidation(t *testing.T) {
+	var calls atomic.Int64
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer api.Close()
+	s, _, err := newConfiguredMCPServer(nil, readapi.Client{BaseURL: api.URL, HTTPClient: api.Client()}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := withCapabilities(context.Background(), &MCPCapability{Tools: []string{"*"}}, "alice")
+	for _, tt := range []struct {
+		tool, confirm, field string
+		valid, invalid       any
+	}{
+		{"tailscale_device_update_key", "updateDeviceKey", "keyExpiryDisabled", false, "false"},
+		{"tailscale_device_set_routes", "setDeviceRoutes", "routes", []string{"10.0.0.0/24"}, "10.0.0.0/24"},
+		{"tailscale_device_set_tags", "setDeviceTags", "tags", []string{"tag:test"}, []any{42}},
+	} {
+		t.Run(tt.tool, func(t *testing.T) {
+			for _, variant := range []string{"missing", "wrong type", "valid"} {
+				t.Run(variant, func(t *testing.T) {
+					args := map[string]any{"deviceId": "123", "confirm": tt.confirm}
+					if variant == "valid" {
+						args[tt.field] = tt.valid
+					} else if variant == "wrong type" {
+						args[tt.field] = tt.invalid
+					}
+					before := calls.Load()
+					response := dispatchGrantTest(t, s, ctx, "tools/call", map[string]any{"name": tt.tool, "arguments": args})
+					rpc, ok := response.(mcp.JSONRPCResponse)
+					if !ok {
+						t.Fatalf("unexpected response: %#v", response)
+					}
+					result := rpc.Result.(*mcp.CallToolResult)
+					if variant == "valid" {
+						if result.IsError || calls.Load() != before+1 {
+							t.Fatalf("valid input failed: %#v", result)
+						}
+					} else if !result.IsError || calls.Load() != before || !strings.Contains(result.Content[0].(mcp.TextContent).Text, "input schema validation failed") {
+						t.Fatalf("invalid input was not rejected before API dispatch: %#v", result)
+					}
+				})
+			}
+		})
+	}
+}
+
 type grantTestSession struct{ notifications chan mcp.JSONRPCNotification }
 
 func (*grantTestSession) Initialize()       {}

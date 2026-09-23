@@ -2,9 +2,15 @@ package readapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 
+	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
 
@@ -114,5 +120,63 @@ func TestArgumentsFromURI(t *testing.T) {
 	}
 	if args["deviceId"] != "node-1" {
 		t.Fatalf("unexpected deviceId %#v", args["deviceId"])
+	}
+	for _, uri := range []string{"tailscale://device//routes", "tailscale://device/node-1/routes/", "tailscale://device/node-1/attributes", "tailscale://device/node-1/extra/routes"} {
+		if _, err := argumentsFromURI("tailscale://device/{deviceId}/routes", uri); err == nil {
+			t.Errorf("accepted invalid URI %q", uri)
+		}
+	}
+}
+
+func TestResourceTemplateBindsAPIArgumentsToURI(t *testing.T) {
+	for _, resource := range ResourceTemplates() {
+		t.Run(resource.OperationID, func(t *testing.T) {
+			var calls atomic.Int64
+			api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
+				want, _, err := Expand(resource.Endpoint, "test", map[string]any{"deviceId": "allowed"})
+				if err != nil || r.URL.Path != want || r.URL.RawQuery != "" {
+					t.Errorf("API target = %s, want %s (expansion error: %v)", r.URL, want, err)
+				}
+				_, _ = w.Write([]byte(`{}`))
+			}))
+			defer api.Close()
+			// The SDK replaces wire arguments; inject a conflict at the handler boundary.
+			s := server.NewMCPServer("test", "test", server.WithResourceHandlerMiddleware(func(next server.ResourceHandlerFunc) server.ResourceHandlerFunc {
+				return func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+					req.Params.Arguments = map[string]any{"deviceId": "forbidden"}
+					return next(ctx, req)
+				}
+			}))
+			allowedURI := strings.ReplaceAll(resource.URI, "{deviceId}", "allowed")
+			RegisterResources(s, Client{BaseURL: api.URL, HTTPClient: api.Client()}, func(_ context.Context, uri string) error {
+				if uri != allowedURI {
+					return errors.New("denied")
+				}
+				return nil
+			})
+			for _, allowed := range []bool{true, false} {
+				uri := allowedURI
+				if !allowed {
+					uri = strings.ReplaceAll(resource.URI, "{deviceId}", "forbidden")
+				}
+				raw, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "resources/read", "params": map[string]any{"uri": uri}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				response := s.HandleMessage(context.Background(), raw)
+				if allowed {
+					rpc, ok := response.(mcp.JSONRPCResponse)
+					if !ok || rpc.Result.(mcp.ReadResourceResult).Contents[0].(mcp.TextResourceContents).URI != allowedURI {
+						t.Fatalf("allowed read: %#v", response)
+					}
+				} else if _, ok := response.(mcp.JSONRPCError); !ok {
+					t.Fatalf("denied read: %#v", response)
+				}
+				if calls.Load() != 1 {
+					t.Fatalf("API calls = %d, want 1", calls.Load())
+				}
+			}
+		})
 	}
 }

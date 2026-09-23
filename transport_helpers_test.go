@@ -180,6 +180,73 @@ func TestBodyDeadlineSlowReadAndStreamSurvival(t *testing.T) {
 	}
 }
 
+// Deliberately omit Unwrap and deadline methods, as an opaque wrapper would.
+type opaqueResponseWriter struct{ http.ResponseWriter }
+
+func TestBodyDeadlineUnsupportedRejectsBeforeRead(t *testing.T) {
+	var calls atomic.Int32
+	handler := bodyLimitMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		calls.Add(1)
+	}), 50*time.Millisecond)
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handler.ServeHTTP(opaqueResponseWriter{w}, r)
+	}))
+	defer s.Close()
+	conn, err := net.Dial("tcp", strings.TrimPrefix(s.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(3 * time.Second))
+	// Leave the body incomplete: neither middleware nor net/http may drain it.
+	fmt.Fprint(conn, "POST /mcp HTTP/1.1\r\nHost: localhost\r\nContent-Length: 100\r\n\r\nx")
+	res, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusInternalServerError || !res.Close || calls.Load() != 0 {
+		t.Fatalf("unsupported deadline: status=%d close=%v calls=%d", res.StatusCode, res.Close, calls.Load())
+	}
+}
+
+func TestBodyDeadlineHTTP2(t *testing.T) {
+	const deadline = 50 * time.Millisecond
+	var calls atomic.Int32
+	s := httptest.NewUnstartedServer(bodyLimitMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: start\n\n")
+		w.(http.Flusher).Flush()
+		time.Sleep(4 * deadline)
+		fmt.Fprint(w, "data: survived\n\n")
+	}), deadline))
+	s.EnableHTTP2 = true
+	s.StartTLS()
+	defer s.Close()
+	s.Client().Timeout = 3 * time.Second
+	input, output := io.Pipe()
+	defer input.Close()
+	defer output.Close()
+	res, err := s.Client().Post(s.URL, "application/json", input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.ProtoMajor != 2 || res.StatusCode != http.StatusRequestTimeout || calls.Load() != 0 {
+		t.Fatalf("slow HTTP/2 body: protocol=%s status=%d calls=%d", res.Proto, res.StatusCode, calls.Load())
+	}
+	res, err = s.Client().Post(s.URL, "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil || res.ProtoMajor != 2 || !strings.Contains(string(body), "survived") || calls.Load() != 1 {
+		t.Fatalf("HTTP/2 stream truncated: protocol=%s body=%q calls=%d error=%v", res.Proto, body, calls.Load(), err)
+	}
+}
+
 func TestAcquireListenersClosesOnSecondFailure(t *testing.T) {
 	first, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

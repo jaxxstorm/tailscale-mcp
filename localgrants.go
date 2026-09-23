@@ -92,7 +92,9 @@ func stdioContextFunc(caps *MCPCapability) server.StdioContextFunc {
 func localGrantMiddleware(next http.Handler, caps *MCPCapability) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u, ok := parseOriginTuple("http://" + r.Host)
-		if !ok || (u.host != "localhost" && u.host != "127.0.0.1" && u.host != "::1") {
+		// net/http supplies the actual bound address, independent of request headers.
+		local, _ := r.Context().Value(http.LocalAddrContextKey).(*net.TCPAddr)
+		if !ok || local == nil || u.port != local.Port || (u.host != "localhost" && u.host != "127.0.0.1" && u.host != "::1") {
 			http.Error(w, "forbidden host", http.StatusForbidden)
 			return
 		}
