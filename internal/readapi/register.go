@@ -36,12 +36,34 @@ func RegisterTools(mcpServer *server.MCPServer, client Client, check AccessCheck
 				props := []mcp.PropertyOption{mcp.Description(param.Description)}
 				if param.Required {
 					props = append(props, mcp.Required())
+					if param.StrictString {
+						props = append(props, mcp.Pattern(`\S`))
+					}
 				}
-				options = append(options, mcp.WithString(param.Name, props...))
+				if bounds := param.IntegerBounds; bounds != nil {
+					props = append(props, mcp.Min(bounds.Minimum), mcp.Max(bounds.Maximum))
+					options = append(options, mcp.WithInteger(param.Name, props...))
+				} else {
+					options = append(options, mcp.WithString(param.Name, props...))
+				}
 			}
 		}
 		if endpoint.Body {
-			options = append(options, mcp.WithObject("body", mcp.Description("JSON request body")))
+			props := []mcp.PropertyOption{mcp.Description("JSON request body")}
+			if len(endpoint.RequiredBodyStrings) > 0 {
+				properties := map[string]any{}
+				for _, name := range endpoint.RequiredBodyStrings {
+					properties[name] = map[string]any{"type": "string", "pattern": `\S`}
+				}
+				props = append(props, mcp.Required(), mcp.Properties(properties))
+			}
+			options = append(options, mcp.WithObject("body", props...))
+			if len(endpoint.RequiredBodyStrings) > 0 {
+				// Set nested required after WithObject consumes the body's required flag.
+				options = append(options, func(tool *mcp.Tool) {
+					tool.InputSchema.Properties["body"].(map[string]any)["required"] = endpoint.RequiredBodyStrings
+				})
+			}
 		}
 		if endpoint.Confirm != "" {
 			options = append(options, mcp.WithString("confirm", mcp.Required(), mcp.Description("Confirmation token; must equal "+endpoint.Confirm)))
@@ -56,6 +78,12 @@ func RegisterTools(mcpServer *server.MCPServer, client Client, check AccessCheck
 				return client.Do(ctx, endpoint, args)
 			})
 			if err != nil {
+				var lifecycleErr lifecycleError
+				if errors.As(err, &lifecycleErr) {
+					result := mcp.NewToolResultError(lifecycleErr.Error())
+					result.StructuredContent = lifecycleErr
+					return result, nil
+				}
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 			return mcp.NewToolResultText(prettyJSON(data)), nil

@@ -910,6 +910,54 @@
     },
     {
       "operation": {
+        "operationId": "listOrganizationTailnets",
+        "method": "GET",
+        "path": "/organizations/{organization}/tailnets",
+        "domain": "Organizations",
+        "summary": "List tailnets"
+      },
+      "mappingType": "tool",
+      "mcpName": "tailscale_list_organization_tailnets",
+      "grantPermission": "tool:tailscale_list_organization_tailnets",
+      "status": "implemented",
+      "rationale": "Alpha organization listing is exposed as a read-only tool with explicit pagination.",
+      "readOnly": true,
+      "idempotent": true
+    },
+    {
+      "operation": {
+        "operationId": "createOrganizationTailnet",
+        "method": "POST",
+        "path": "/organizations/{organization}/tailnets",
+        "domain": "Organizations",
+        "summary": "Create a tailnet"
+      },
+      "mappingType": "tool",
+      "mcpName": "tailscale_create_organization_tailnet",
+      "grantPermission": "tool:tailscale_create_organization_tailnet",
+      "status": "implemented",
+      "rationale": "Alpha API-only tailnet creation requires confirmation and returns sensitive one-time OAuth credentials.",
+      "confirmation": "createOrganizationTailnet"
+    },
+    {
+      "operation": {
+        "operationId": "deleteTailnet",
+        "method": "DELETE",
+        "path": "/tailnet/{tailnet}",
+        "domain": "Organizations",
+        "summary": "Delete a tailnet"
+      },
+      "mappingType": "tool",
+      "mcpName": "tailscale_delete_tailnet",
+      "grantPermission": "tool:tailscale_delete_tailnet",
+      "status": "implemented",
+      "rationale": "Alpha tailnet deletion requires confirmation and exact acknowledgement of the explicitly configured target.",
+      "destructive": true,
+      "idempotent": true,
+      "confirmation": "deleteTailnet"
+    },
+    {
+      "operation": {
         "operationId": "getPolicyFile",
         "method": "GET",
         "path": "/tailnet/{tailnet}/acl",
@@ -1409,8 +1457,8 @@
     }
   ],
   "summary": {
-    "total": 90,
-    "implemented": 90,
+    "total": 93,
+    "implemented": 93,
     "gaps": 0,
     "excluded": 0,
     "planned": 0

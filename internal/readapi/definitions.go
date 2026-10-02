@@ -2,6 +2,11 @@ package readapi
 
 func ReadEndpoints() []Endpoint {
 	return []Endpoint{
+		{OperationID: "listOrganizationTailnets", ToolName: "tailscale_list_organization_tailnets", Summary: "Alpha: List one page of organization tailnets, including cursor and totalCount. Omit limit for the upstream default of 100.", Method: "GET", Path: "/organizations/{organization}/tailnets", Parameters: []Parameter{
+			{Name: "organization", Location: PathParam, Description: "Organization ID or - for the current organization", Required: true, StrictString: true},
+			{Name: "limit", Location: QueryParam, Description: "Page size from 1 through 100", IntegerBounds: &IntegerBounds{Minimum: 1, Maximum: 100}},
+			{Name: "cursor", Location: QueryParam, Description: "Opaque cursor from the previous page", StrictString: true},
+		}},
 		{OperationID: "listDeviceRoutes", ToolName: "tailscale_list_device_routes", Summary: "List subnet routes advertised and enabled for a device", Method: "GET", Path: "/device/{deviceId}/routes", Parameters: []Parameter{RequiredPath("deviceId", "Device ID")}},
 		{OperationID: "getDevicePostureAttributes", ToolName: "tailscale_get_device_posture_attributes", Summary: "Get posture attributes for a device", Method: "GET", Path: "/device/{deviceId}/attributes", Parameters: []Parameter{RequiredPath("deviceId", "Device ID")}},
 		{OperationID: "listDeviceInvites", ToolName: "tailscale_list_device_invites", Summary: "List share invites for a device", Method: "GET", Path: "/device/{deviceId}/device-invites", Parameters: []Parameter{RequiredPath("deviceId", "Device ID")}},
@@ -40,6 +45,8 @@ func ReadEndpoints() []Endpoint {
 
 func MutatingEndpoints() []Endpoint {
 	return []Endpoint{
+		{OperationID: "createOrganizationTailnet", ToolName: "tailscale_create_organization_tailnet", Summary: "Alpha: Create an API-only organization tailnet. Returns sensitive one-time OAuth credentials; protect client transcripts.", Method: "POST", Path: "/organizations/{organization}/tailnets", Parameters: []Parameter{{Name: "organization", Location: PathParam, Description: "Organization ID or - for the current organization", Required: true, StrictString: true}}, Body: true, RequiredBodyStrings: []string{"displayName"}, Confirm: "createOrganizationTailnet"},
+		{OperationID: "deleteTailnet", ToolName: "tailscale_delete_tailnet", Summary: "Alpha: Irreversibly delete the explicitly configured tailnet, removing all users, devices, and configuration. Requires exact configured-target acknowledgement and uses only the configured credential.", Method: "DELETE", Path: "/tailnet/{tailnet}", Parameters: []Parameter{{Name: "tailnet", Location: PathParam, Description: "Exact explicitly configured tailnet; - is not allowed", Required: true, StrictString: true}}, Confirm: "deleteTailnet"},
 		{OperationID: "updateContact", ToolName: "tailscale_update_contact", Summary: "Update a tailnet contact", Method: "PATCH", Path: "/tailnet/{tailnet}/contacts/{contactType}", Parameters: []Parameter{RequiredPath("contactType", "Contact type")}, Body: true, Confirm: "updateContact"},
 		{OperationID: "resendContactVerificationEmail", ToolName: "tailscale_resend_contact_verification_email", Summary: "Resend contact verification email", Method: "POST", Path: "/tailnet/{tailnet}/contacts/{contactType}/resend-verification-email", Parameters: []Parameter{RequiredPath("contactType", "Contact type")}, Confirm: "resendContactVerificationEmail"},
 		{OperationID: "setDnsConfiguration", ToolName: "tailscale_set_dns_configuration", Summary: "Replace DNS configuration", Method: "POST", Path: "/tailnet/{tailnet}/dns/configuration", Body: true, Idempotent: Bool(true), Confirm: "setDnsConfiguration"},

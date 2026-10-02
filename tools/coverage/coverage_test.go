@@ -2,12 +2,115 @@ package mcpcoverage
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/jaxxstorm/tailscale-mcp/internal/readapi"
 )
+
+func snapshotReport(t *testing.T) Report {
+	t.Helper()
+	ops, err := LoadOpenAPI("tailscale-v2-openapi.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := BuildReport("tailscale-v2-openapi.yaml", ops, CurrentMappings(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return report
+}
+
+func TestSnapshotCoverageComplete(t *testing.T) {
+	report := snapshotReport(t)
+	if report.Summary.Total == 0 {
+		t.Fatal("empty snapshot")
+	}
+	for _, record := range report.Operations {
+		if record.Status != StatusImplemented {
+			t.Errorf("%s: expected implemented mapping, got %s", record.Operation.OperationID, record.Status)
+		}
+	}
+	// Deliberately inventory the snapshot rather than freezing future coverage at 93.
+	if report.Summary.Implemented != report.Summary.Total || report.Summary.Gaps != 0 || report.Summary.Excluded != 0 || report.Summary.Planned != 0 {
+		t.Errorf("incomplete snapshot: %+v", report.Summary)
+	}
+}
+
+func TestOriginal90MappingIdentities(t *testing.T) {
+	data, err := os.ReadFile("testdata/original-90.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	current := map[string][]string{}
+	for _, r := range snapshotReport(t).Operations {
+		current[r.Operation.OperationID] = []string{r.Operation.OperationID, r.Operation.Method, r.Operation.Path, string(r.MappingType), r.MCPName, r.ResourceURI, r.GrantPermission, r.Confirmation, string(r.Status)}
+	}
+	seen := map[string]bool{}
+	for _, line := range strings.Split(string(data), "\n") {
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		want := strings.Fields(line)
+		if len(want) != 9 || seen[want[0]] {
+			t.Fatalf("invalid baseline row: %q", line)
+		}
+		seen[want[0]] = true
+		for i, value := range want {
+			if value == "-" {
+				want[i] = ""
+			}
+		}
+		if got := current[want[0]]; !reflect.DeepEqual(got, want) {
+			t.Errorf("%s mapping identity changed:\n got %q\nwant %q", want[0], got, want)
+		}
+	}
+	if len(seen) != 90 {
+		t.Fatalf("original baseline has %d operations, want 90", len(seen))
+	}
+}
+
+func TestLifecycleCanonicalMappings(t *testing.T) {
+	for _, want := range []struct {
+		id, method, path, name, confirmation string
+		readOnly, destructive, idempotent    bool
+	}{
+		{"listOrganizationTailnets", "GET", "/organizations/{organization}/tailnets", "tailscale_list_organization_tailnets", "", true, false, true},
+		{"createOrganizationTailnet", "POST", "/organizations/{organization}/tailnets", "tailscale_create_organization_tailnet", "createOrganizationTailnet", false, false, false},
+		{"deleteTailnet", "DELETE", "/tailnet/{tailnet}", "tailscale_delete_tailnet", "deleteTailnet", false, true, true},
+	} {
+		t.Run(want.id, func(t *testing.T) {
+			count := 0
+			for _, mapping := range CurrentMappings() {
+				if mapping.OperationID != want.id {
+					continue
+				}
+				count++
+				if mapping.Type != MappingTool || mapping.Name != want.name || mapping.URI != "" || mapping.GrantPermission != "tool:"+want.name || mapping.Confirmation != want.confirmation || mapping.ReadOnly != want.readOnly || mapping.Destructive != want.destructive || mapping.Idempotent != want.idempotent || !strings.Contains(mapping.Rationale, "Alpha") {
+					t.Errorf("unexpected canonical mapping: %+v", mapping)
+				}
+			}
+			if count != 1 {
+				t.Fatalf("got %d lifecycle mappings, want exactly one tool", count)
+			}
+			found := false
+			for _, r := range snapshotReport(t).Operations {
+				if r.Operation.OperationID == want.id {
+					found = true
+					if r.Operation.Method != want.method || r.Operation.Path != want.path || r.Status != StatusImplemented {
+						t.Errorf("unexpected lifecycle report record: %+v", r)
+					}
+				}
+			}
+			if !found {
+				t.Fatal("lifecycle operation missing from snapshot")
+			}
+		})
+	}
+}
 
 func TestLoadOpenAPIEmitsEachOperationOnce(t *testing.T) {
 	ops, err := LoadOpenAPI(filepath.Join("tailscale-v2-openapi.yaml"))

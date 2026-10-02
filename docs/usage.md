@@ -342,6 +342,95 @@ These hints are advisory metadata for MCP clients. Server-side enforcement remai
 
 The tool remains read-only and accepts the exact `tailscale_list_network_flow_logs` tool grant or a matching tool selector.
 
+### Alpha Organization Lifecycle
+
+These three APIs are **Alpha** and their upstream contracts may change. They are canonical tools in the separate `organizations` group; no new resources, prompts, or curated aliases are added.
+
+| Tool / Exact Tool Grant | Upstream Operation | Required Confirmation | Upstream OAuth Scope |
+|---|---|---|---|
+| `tailscale_list_organization_tailnets` | `GET /organizations/{organization}/tailnets` | None | `tailnets:read` |
+| `tailscale_create_organization_tailnet` | `POST /organizations/{organization}/tailnets` | `createOrganizationTailnet` | `tailnets` |
+| `tailscale_delete_tailnet` | `DELETE /tailnet/{tailnet}` | `deleteTailnet` | `all` |
+
+Upstream scopes authorize the **server credential**, not the MCP caller. They do not replace `jaxxstorm.com/cap/mcp` grants. Startup requirements are unchanged: all serving modes, including stdio, first read settings for `TAILSCALE_TAILNET`; tailnet HTTP also requires authority to mint the tagged tsnet auth key and `TS_ADVERTISE_TAGS`. Organization-only credentials with `tailnets:read` or `tailnets` may therefore fail startup even if they can invoke the organization endpoint directly. This release does not add an organization-only startup mode or separate per-tool credentials.
+
+#### Listing One Page
+
+Example MCP `tools/call` parameters:
+
+```json
+{
+  "name": "tailscale_list_organization_tailnets",
+  "arguments": {"organization": "-", "limit": 25}
+}
+```
+
+`organization` must be a nonblank string; `-` selects the credential's current organization. An explicit organization is escaped as one path segment. `limit` must be an integer from 1 through 100; omitting it leaves the upstream default of 100. Optional `cursor` must be a string. Each invocation makes one page request and preserves `tailnets`, `cursor`, and `totalCount`; it never automatically fetches subsequent pages. Use the returned opaque cursor unchanged for the next call:
+
+```json
+{
+  "name": "tailscale_list_organization_tailnets",
+  "arguments": {"organization": "-", "limit": 25, "cursor": "<returned-cursor>"}
+}
+```
+
+Listing is read-only and idempotent, but can expose sensitive organization-wide inventory. A failed page returns an error, not a partial collection or fabricated continuation.
+
+#### Creating An API-Only Tailnet
+
+```json
+{
+  "name": "tailscale_create_organization_tailnet",
+  "arguments": {
+    "organization": "-",
+    "body": {"displayName": "Example API Tailnet"},
+    "confirm": "createOrganizationTailnet"
+  }
+}
+```
+
+`body` is a required JSON object containing a nonblank string `displayName`. Upstream enforces naming and uniqueness rules. This creates an **API-only tailnet**: it has no human users, does not appear in the admin console, and is managed entirely through the API. Creation does not switch the MCP server's configured target. The full success response is preserved, including `id`, `displayName`, `orgId`, `dnsName`, `createdAt`, `oauthClient`, and `alreadyExists`.
+
+**Treat the result as a secret.** `oauthClient.secret` is a sensitive one-time credential returned to the authorized caller. Store it securely when returned; do not assume it can be retrieved later, and do not discard credentials merely because `alreadyExists` is present. Review MCP client transcripts, model context, tracing, and retention policies before granting creation. The server does not log this secret or include it in failure payloads. Creation is neither read-only nor idempotent; the server does not automatically retry it. An ambiguous failure does not prove that creation did not happen. Check authoritative state before deciding whether to submit another confirmed call.
+
+#### Deleting Only The Configured Tailnet
+
+**Deletion is irreversible and removes all users, devices, and configuration.** The following is an illustrative `tools/call` payload, not a setup or verification step. It is accepted only if `TAILSCALE_TAILNET` is explicitly configured as exactly `example.com` and the configured credential has authority to delete that target:
+
+```json
+{
+  "name": "tailscale_delete_tailnet",
+  "arguments": {"tailnet": "example.com", "confirm": "deleteTailnet"}
+}
+```
+
+The `tailnet` argument is an acknowledgement, not a target override: it must exactly equal the configured value, without alias resolution or normalization. Missing, blank, non-string, `-`, and mismatched targets are rejected, as are blank or `-` configured targets. Correct confirmation alone cannot bypass this check. The server reuses the configured credential, sends a bodyless DELETE, and accepts an empty upstream 200 response. It does not exchange tokens, accept per-call credentials, infer the target from creation output, or support arbitrary cross-tailnet deletion. A credential/target mismatch remains an upstream error. Deletion is marked destructive and idempotent, but these advisory hints are not permission to automatically retry an ambiguous failure.
+
+#### Lifecycle Grants
+
+Use exact names in the capability's `tools` array for least privilege. For example, the following value inside a Tailscale grant's `app` object permits only organization listing:
+
+```json
+{
+  "jaxxstorm.com/cap/mcp": [{
+    "tools": ["tailscale_list_organization_tailnets"],
+    "resources": []
+  }]
+}
+```
+
+Replace that exact tool name with `tailscale_create_organization_tailnet` or `tailscale_delete_tailnet` to authorize only the corresponding action. Coverage reports label these permissions `tool:<name>`; do **not** include the `tool:` prefix in capability arrays.
+
+| Tool Selector | Lifecycle Access |
+|---|---|
+| `group:organizations:read` | Listing only |
+| `group:organizations` | Listing, creation, and deletion |
+| `read:*` | Listing, plus all other registered readers |
+| `*` | All three, plus every other registered tool |
+| `group:tailnet` | None of these lifecycle tools |
+
+Existing wildcard selectors expand on upgrade: `*` now includes creation and deletion, and `read:*` now exposes organization listing. Review existing policies rather than assuming this feature is opt-in for wildcard users. Group grants still require confirmation for creation/deletion and the exact target acknowledgement for deletion. Upstream `all` scope alone authorizes no MCP calls. Discovery is caller-filtered, and ungranted direct calls are denied before upstream access. Inspect `--list-groups` offline to review the new group before upgrading.
+
 ### Curated Operator Tools
 
 Curated tools are task-oriented wrappers around one or more generated endpoint tools. They do not replace the generated `tailscale_<operation>` tools and are not counted separately in OpenAPI coverage. Each curated tool uses its own grant name matching the tool name.

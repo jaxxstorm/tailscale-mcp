@@ -8,24 +8,41 @@ const (
 )
 
 type Parameter struct {
-	Name        string
-	Location    ParameterLocation
-	Description string
-	Required    bool
+	Name          string
+	Location      ParameterLocation
+	Description   string
+	Required      bool
+	StrictString  bool
+	IntegerBounds *IntegerBounds
+}
+
+type IntegerBounds struct {
+	Minimum int
+	Maximum int
 }
 
 type Endpoint struct {
-	OperationID string
-	ToolName    string
-	Summary     string
-	Method      string
-	Path        string
-	Parameters  []Parameter
-	Body        bool
-	ReadLike    bool
-	Destructive bool
-	Idempotent  *bool
-	Confirm     string
+	OperationID         string
+	ToolName            string
+	Summary             string
+	Method              string
+	Path                string
+	Parameters          []Parameter
+	Body                bool
+	RequiredBodyStrings []string
+	ReadLike            bool
+	Destructive         bool
+	Idempotent          *bool
+	Confirm             string
+}
+
+func (e Endpoint) isLifecycle() bool {
+	switch e.OperationID {
+	case "listOrganizationTailnets", "createOrganizationTailnet", "deleteTailnet":
+		return true
+	default:
+		return false
+	}
 }
 
 type ToolHints struct {

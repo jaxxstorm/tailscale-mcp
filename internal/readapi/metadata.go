@@ -9,6 +9,9 @@ import (
 // ToolGroup follows API domains, not tool-name heuristics. Device subresources
 // remain in devices, except share invitations which belong to invites.
 func (e Endpoint) ToolGroup() string {
+	if e.isLifecycle() {
+		return "organizations"
+	}
 	parts := strings.Split(strings.Trim(e.Path, "/"), "/")
 	if len(parts) >= 3 && parts[0] == "tailnet" {
 		parts = parts[2:]

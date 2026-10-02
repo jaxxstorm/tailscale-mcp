@@ -6,6 +6,7 @@ An MCP (Model Context Protocol) server for Tailscale, enabling detailed queries 
 
 * **Streamable HTTP Transport**: Serves MCP on `/mcp` via Tailscale, with optional HTTPS and separately opt-in loopback HTTP
 * **Comprehensive Tailscale Integration**: Full mapped coverage of the vendored Tailscale OpenAPI snapshot
+* **Alpha Organization APIs**: List organization tailnets, create API-only tailnets, and delete only the explicitly configured tailnet with guarded tools
 * **OAuth Grants Authorization**: Fine-grained MCP access control with `jaxxstorm.com/cap/mcp`
 * **Single Credential Startup**: Uses `TAILSCALE_OAUTH_TOKEN` for Admin API access and tsnet startup
 * **Configurable tsnet State**: Stores tsnet state on the filesystem by default, with optional Kubernetes Secret or AWS SSM state stores
@@ -39,6 +40,8 @@ Local HTTP requires both `--local-http` and explicit grants, for example:
 ```
 
 This additionally opens `http://127.0.0.1:8080/mcp`. Every process able to connect receives those grants; avoid enabling it on untrusted shared hosts. `--local-port` is independent of the tailnet `--port`. Deprecated stdio uses `--stdio --local-grants` without starting tsnet or requiring advertised tags, but still validates Admin API credentials. See the usage guide for migration, limits, and least-privilege selectors.
+
+Organization lifecycle tools are Alpha: `tailscale_list_organization_tailnets`, `tailscale_create_organization_tailnet`, and `tailscale_delete_tailnet`. Creation returns sensitive one-time OAuth credentials; deletion is irreversible and requires an exact configured-target acknowledgement plus confirmation. Existing `*` tool grants now include these mutations, while `read:*` includes organization listing. Review [lifecycle examples, grants, scopes, and startup limitations](docs/usage.md#alpha-organization-lifecycle) before enabling them. No new resources or prompts are added.
 
 ## Documentation
 

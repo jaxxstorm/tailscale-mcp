@@ -4,6 +4,7 @@ import "testing"
 
 func TestToolMetadataDomains(t *testing.T) {
 	groups := map[string]string{
+		"listOrganizationTailnets": "organizations", "createOrganizationTailnet": "organizations", "deleteTailnet": "organizations",
 		"listDeviceRoutes": "devices", "getDevicePostureAttributes": "devices",
 		"batchUpdateCustomDevicePostureAttributes": "devices", "setDeviceRoutes": "devices",
 		"listDeviceInvites": "invites", "getDeviceInvite": "invites", "listUserInvites": "invites",

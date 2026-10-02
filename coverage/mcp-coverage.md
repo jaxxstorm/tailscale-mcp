@@ -4,7 +4,7 @@ Source: `tools/coverage/tailscale-v2-openapi.yaml`
 
 | Total | Implemented | Gaps | Excluded | Planned |
 |---:|---:|---:|---:|---:|
-| 90 | 90 | 0 | 0 | 0 |
+| 93 | 93 | 0 | 0 | 0 |
 
 ## Contacts
 
@@ -103,6 +103,14 @@ Source: `tools/coverage/tailscale-v2-openapi.yaml`
 | implemented | DELETE | `/tailnet/{tailnet}/oauth-apps/{appId}` | `deleteOAuthApp` | tool: `tailscale_delete_oauth_app` | `tool:tailscale_delete_oauth_app` | Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token. |
 | implemented | GET | `/tailnet/{tailnet}/oauth-apps/{appId}` | `getOAuthApp` | tool: `tailscale_get_oauth_app` | `tool:tailscale_get_oauth_app` | Read-only Tailscale Admin API operation is exposed through the generic read API tool registrar. |
 | implemented | PUT | `/tailnet/{tailnet}/oauth-apps/{appId}` | `updateOAuthApp` | tool: `tailscale_update_oauth_app` | `tool:tailscale_update_oauth_app` | Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token. |
+
+## Organizations
+
+| Status | Method | Path | Operation | MCP | Grant | Rationale |
+|---|---|---|---|---|---|---|
+| implemented | GET | `/organizations/{organization}/tailnets` | `listOrganizationTailnets` | tool: `tailscale_list_organization_tailnets` | `tool:tailscale_list_organization_tailnets` | Alpha organization listing is exposed as a read-only tool with explicit pagination. |
+| implemented | POST | `/organizations/{organization}/tailnets` | `createOrganizationTailnet` | tool: `tailscale_create_organization_tailnet` | `tool:tailscale_create_organization_tailnet` | Alpha API-only tailnet creation requires confirmation and returns sensitive one-time OAuth credentials. |
+| implemented | DELETE | `/tailnet/{tailnet}` | `deleteTailnet` | tool: `tailscale_delete_tailnet` | `tool:tailscale_delete_tailnet` | Alpha tailnet deletion requires confirmation and exact acknowledgement of the explicitly configured target. |
 
 ## PolicyFile
 

@@ -49,6 +49,14 @@ func CurrentMappings() []Mapping {
 		if endpoint.Confirm != "" {
 			rationale = "Tailscale Admin API operation is exposed as a guarded MCP tool that requires an explicit confirmation token."
 		}
+		switch endpoint.OperationID {
+		case "listOrganizationTailnets":
+			rationale = "Alpha organization listing is exposed as a read-only tool with explicit pagination."
+		case "createOrganizationTailnet":
+			rationale = "Alpha API-only tailnet creation requires confirmation and returns sensitive one-time OAuth credentials."
+		case "deleteTailnet":
+			rationale = "Alpha tailnet deletion requires confirmation and exact acknowledgement of the explicitly configured target."
+		}
 		mappings = append(mappings, Mapping{
 			OperationID:     endpoint.OperationID,
 			Type:            MappingTool,

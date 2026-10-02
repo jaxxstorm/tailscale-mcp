@@ -43,6 +43,8 @@ brews:
     repository:
       owner: jaxxstorm
       name: homebrew-tap
+      # The workflow token cannot write to a different repository.
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     commit_author:
       name: GitHub Actions
       email: bot@leebriggs.co.uk
