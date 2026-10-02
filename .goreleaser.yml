@@ -22,6 +22,11 @@ archives:
     builds:
       - tailscale-mcp
     name_template: "{{ .Binary }}-{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
+    # Explicit documentation inputs; never archive runtime state or credentials.
+    files:
+      - README.md
+      - docs/usage.md
+      - docs/integration.md
     format_overrides:
       - goos: windows
         format: zip

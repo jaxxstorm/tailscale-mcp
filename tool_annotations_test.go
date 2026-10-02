@@ -10,7 +10,7 @@ import (
 func TestCoreToolsApplyReadOnlyAnnotations(t *testing.T) {
 	logger = zap.NewNop()
 	mcpServer := server.NewMCPServer("test", "0.0.1")
-	registerCoreMCP(mcpServer, nil)
+	registerCoreMCP(mcpServer, nil, checkToolAccess)
 
 	for _, name := range []string{"get_device_info", "list_all_devices"} {
 		t.Run(name, func(t *testing.T) {

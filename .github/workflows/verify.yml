@@ -1,0 +1,25 @@
+name: verify
+
+on:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: Build
+        run: go build ./...
+      - name: Test and validate API coverage
+        run: make verify
+      - name: Check generated coverage is current
+        run: git diff --exit-code -- coverage/mcp-coverage.json coverage/mcp-coverage.md coverage/mcp-coverage-diff.md coverage/parity-backlog.md

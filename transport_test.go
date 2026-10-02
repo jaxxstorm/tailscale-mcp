@@ -258,7 +258,7 @@ func TestRegisterTSNetBuildInfo(t *testing.T) {
 func TestAllowOriginMiddlewareRejectsForbiddenOriginBeforeNext(t *testing.T) {
 	logger = zap.NewNop()
 	called := false
-	handler := allowOriginMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := strictOriginMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
 	}))
 
@@ -279,7 +279,7 @@ func TestAllowOriginMiddlewareRejectsForbiddenOriginBeforeNext(t *testing.T) {
 func TestAllowOriginMiddlewareAllowsSameHostOrigin(t *testing.T) {
 	logger = zap.NewNop()
 	called := false
-	handler := allowOriginMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := strictOriginMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
 		w.WriteHeader(http.StatusNoContent)
 	}))

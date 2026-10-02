@@ -92,13 +92,10 @@ func RegisterResources(mcpServer *server.MCPServer, client Client, check AccessC
 	for _, resource := range ResourceTemplates() {
 		resource := resource
 		mcpServer.AddResourceTemplate(mcp.NewResourceTemplate(resource.URI, resource.Name, mcp.WithTemplateMIMEType("application/json")), func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-			args := req.Params.Arguments
-			if len(args) == 0 {
-				var err error
-				args, err = argumentsFromURI(resource.URI, req.Params.URI)
-				if err != nil {
-					return nil, err
-				}
+			// Bind the API target to the URI checked by authorization, not supplied arguments.
+			args, err := argumentsFromURI(resource.URI, req.Params.URI)
+			if err != nil {
+				return nil, err
 			}
 			data, err := withAccess(ctx, req.Params.URI, check, func() (json.RawMessage, error) {
 				return client.Do(ctx, resource.Endpoint, args)
@@ -122,14 +119,17 @@ func validateConfirmation(endpoint Endpoint, args map[string]any) error {
 }
 
 func argumentsFromURI(template, uri string) (map[string]any, error) {
-	templateParts := strings.Split(strings.Trim(template, "/"), "/")
-	uriParts := strings.Split(strings.Trim(uri, "/"), "/")
+	templateParts := strings.Split(template, "/")
+	uriParts := strings.Split(uri, "/")
 	if len(templateParts) != len(uriParts) {
 		return nil, errors.New("resource URI does not match template")
 	}
 	args := map[string]any{}
 	for i, part := range templateParts {
 		if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
+			if uriParts[i] == "" {
+				return nil, errors.New("resource URI has an empty template argument")
+			}
 			args[strings.TrimSuffix(strings.TrimPrefix(part, "{"), "}")] = uriParts[i]
 			continue
 		}

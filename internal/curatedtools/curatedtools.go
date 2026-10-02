@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jaxxstorm/tailscale-mcp/internal/readapi"
+	"github.com/jaxxstorm/tailscale-mcp/internal/toolmeta"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -45,6 +46,29 @@ func RegisterAll(s *server.MCPServer, opts Options) {
 			registerTool(s, opts, def)
 		}
 	}
+}
+
+// ToolMetadata uses the same definitions that supply registration annotations.
+func ToolMetadata(localCLI bool) []toolmeta.Tool {
+	var tools []toolmeta.Tool
+	for _, def := range curatedTools(Options{}) {
+		group := def.Endpoint.ToolGroup()
+		switch def.Name {
+		case "tailscale_status":
+			group = "tailnet"
+		case "tailscale_get_acl", "tailscale_validate_acl", "tailscale_preview_acl", "tailscale_update_acl":
+			group = "policy"
+		case "tailscale_set_devices_authorized", "tailscale_device_authorize", "tailscale_device_deauthorize":
+			group = "devices"
+		}
+		tools = append(tools, toolmeta.Tool{Name: def.Name, Group: group, ReadOnly: def.ReadOnly})
+	}
+	if localCLI {
+		for _, def := range localCLITools() {
+			tools = append(tools, toolmeta.Tool{Name: def.Name, Group: "local", ReadOnly: def.ReadOnly})
+		}
+	}
+	return tools
 }
 
 func curatedTools(opts Options) []toolDef {
