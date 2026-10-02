@@ -620,8 +620,18 @@ func TestStartupIntegrationSignals(t *testing.T) {
 }
 
 func TestStartupIntegrationStdioCancellationWithOpenInput(t *testing.T) {
-	for _, cause := range []string{"context", "interrupt", "terminate"} {
-		t.Run(cause, func(t *testing.T) {
+	for _, tc := range []struct {
+		cause   string
+		partial bool
+	}{
+		{cause: "context"},
+		{cause: "interrupt"},
+		{cause: "terminate"},
+		{cause: "interrupt", partial: true},
+		{cause: "terminate", partial: true},
+	} {
+		t.Run(fmt.Sprintf("%s/partial=%v", tc.cause, tc.partial), func(t *testing.T) {
+			cause := tc.cause
 			mode := "stdio"
 			if cause == "context" {
 				mode = "stdio-context"
@@ -645,6 +655,11 @@ func TestStartupIntegrationStdioCancellationWithOpenInput(t *testing.T) {
 			var response map[string]json.RawMessage
 			if err := json.NewDecoder(output).Decode(&response); err != nil || response["result"] == nil {
 				t.Fatalf("initialize: %v %s", err, response)
+			}
+			if tc.partial {
+				if _, err := fmt.Fprint(input, `{"jsonrpc":"2.0","id":2,"method":`); err != nil {
+					t.Fatal(err)
+				}
 			}
 			if cause == "context" {
 				// The fake API cancels run's context, without delivering a signal.

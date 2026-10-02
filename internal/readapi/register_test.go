@@ -144,7 +144,7 @@ func TestResourceTemplateBindsAPIArgumentsToURI(t *testing.T) {
 			// The SDK replaces wire arguments; inject a conflict at the handler boundary.
 			s := server.NewMCPServer("test", "test", server.WithResourceHandlerMiddleware(func(next server.ResourceHandlerFunc) server.ResourceHandlerFunc {
 				return func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-					req.Params.Arguments = map[string]any{"deviceId": "forbidden"}
+					req.Params.Arguments = map[string]any{"deviceId": "forbidden", "fields": "all"}
 					return next(ctx, req)
 				}
 			}))
@@ -160,7 +160,7 @@ func TestResourceTemplateBindsAPIArgumentsToURI(t *testing.T) {
 				if !allowed {
 					uri = strings.ReplaceAll(resource.URI, "{deviceId}", "forbidden")
 				}
-				raw, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "resources/read", "params": map[string]any{"uri": uri}})
+				raw, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "resources/read", "params": map[string]any{"uri": uri, "arguments": map[string]any{"deviceId": "forbidden"}}})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -176,6 +176,54 @@ func TestResourceTemplateBindsAPIArgumentsToURI(t *testing.T) {
 				if calls.Load() != 1 {
 					t.Fatalf("API calls = %d, want 1", calls.Load())
 				}
+			}
+		})
+	}
+}
+
+func TestResourceTemplateRejectsMalformedURIBeforeAccess(t *testing.T) {
+	for _, resource := range ResourceTemplates() {
+		t.Run(resource.OperationID, func(t *testing.T) {
+			validURI := strings.ReplaceAll(resource.URI, "{deviceId}", "allowed")
+			for _, uri := range []string{
+				strings.ReplaceAll(resource.URI, "{deviceId}", ""),
+				validURI + "/extra",
+				strings.ReplaceAll(resource.URI, "{deviceId}", "allowed/extra"),
+				strings.Replace(validURI, "tailscale://", "other://", 1),
+			} {
+				t.Run(uri, func(t *testing.T) {
+					var calls atomic.Int64
+					api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						calls.Add(1)
+						_, _ = w.Write([]byte(`{}`))
+					}))
+					defer api.Close()
+					// Bypass SDK routing to exercise the handler's own URI validation.
+					s := server.NewMCPServer("test", "test", server.WithResourceHandlerMiddleware(func(next server.ResourceHandlerFunc) server.ResourceHandlerFunc {
+						return func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+							req.Params.URI = uri
+							req.Params.Arguments = map[string]any{"deviceId": "allowed"}
+							return next(ctx, req)
+						}
+					}))
+					checked := false
+					RegisterResources(s, Client{BaseURL: api.URL, HTTPClient: api.Client()}, func(context.Context, string) error {
+						checked = true
+						return nil
+					})
+					raw, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "resources/read", "params": map[string]any{"uri": validURI}})
+					if err != nil {
+						t.Fatal(err)
+					}
+					if response := s.HandleMessage(context.Background(), raw); response == nil {
+						t.Fatal("missing error response")
+					} else if _, ok := response.(mcp.JSONRPCError); !ok {
+						t.Fatalf("malformed URI read: %#v", response)
+					}
+					if checked || calls.Load() != 0 {
+						t.Fatalf("malformed URI reached authorization or API: checked=%v, API calls=%d", checked, calls.Load())
+					}
+				})
 			}
 		})
 	}

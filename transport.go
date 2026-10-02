@@ -259,7 +259,7 @@ func bodyLimitMiddleware(next http.Handler, timeout time.Duration) http.Handler 
 		}
 		controller := http.NewResponseController(w)
 		if err := controller.SetReadDeadline(time.Now().Add(timeout)); err != nil {
-			// Fail closed if a transport or wrapper cannot bound reads. Closing
+			// Fail closed, including ErrNotSupported, if reads cannot be bounded. Closing
 			// the HTTP/1 connection also prevents net/http from draining the body.
 			w.Header().Set("Connection", "close")
 			http.Error(w, "cannot bound request body read", http.StatusInternalServerError)
@@ -283,6 +283,7 @@ func bodyLimitMiddleware(next http.Handler, timeout time.Duration) http.Handler 
 			return
 		}
 		if clearErr != nil {
+			w.Header().Set("Connection", "close")
 			http.Error(w, "cannot clear request body deadline", http.StatusInternalServerError)
 			return
 		}

@@ -183,6 +183,59 @@ func TestBodyDeadlineSlowReadAndStreamSurvival(t *testing.T) {
 // Deliberately omit Unwrap and deadline methods, as an opaque wrapper would.
 type opaqueResponseWriter struct{ http.ResponseWriter }
 
+type failingDeadlineWriter struct {
+	*httptest.ResponseRecorder
+	failOn    int
+	deadlines []time.Time
+	err       error
+}
+
+func (w *failingDeadlineWriter) SetReadDeadline(deadline time.Time) error {
+	w.deadlines = append(w.deadlines, deadline)
+	if len(w.deadlines) == w.failOn {
+		return w.err
+	}
+	return nil
+}
+
+type observedBodyReader struct {
+	io.Reader
+	reads int
+}
+
+func (r *observedBodyReader) Read(p []byte) (int, error) {
+	r.reads++
+	return r.Reader.Read(p)
+}
+
+func TestBodyDeadlineErrorsFailClosed(t *testing.T) {
+	for _, deadlineErr := range []error{http.ErrNotSupported, fmt.Errorf("wrapped: %w", http.ErrNotSupported), errors.New("deadline failed")} {
+		for _, failOn := range []int{1, 2} {
+			t.Run(fmt.Sprintf("%s/call=%d", deadlineErr, failOn), func(t *testing.T) {
+				body := &observedBodyReader{Reader: strings.NewReader("{}")}
+				r := httptest.NewRequest(http.MethodPost, "/mcp", body)
+				w := &failingDeadlineWriter{ResponseRecorder: httptest.NewRecorder(), failOn: failOn, err: deadlineErr}
+				dispatched := false
+				bodyLimitMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+					dispatched = true
+				}), time.Second).ServeHTTP(w, r)
+				if w.Code != http.StatusInternalServerError || w.Header().Get("Connection") != "close" || dispatched {
+					t.Fatalf("deadline error: status=%d headers=%v dispatched=%v", w.Code, w.Header(), dispatched)
+				}
+				if len(w.deadlines) != failOn || w.deadlines[0].IsZero() {
+					t.Fatalf("unexpected deadlines: %v", w.deadlines)
+				}
+				if failOn == 1 && body.reads != 0 {
+					t.Fatal("read body without a supported deadline")
+				}
+				if failOn == 2 && (!w.deadlines[1].IsZero() || body.reads == 0) {
+					t.Fatal("deadline not cleared after body ingestion")
+				}
+			})
+		}
+	}
+}
+
 func TestBodyDeadlineUnsupportedRejectsBeforeRead(t *testing.T) {
 	var calls atomic.Int32
 	handler := bodyLimitMiddleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {

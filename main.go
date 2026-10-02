@@ -801,6 +801,8 @@ func run(ctx context.Context, cli CLI) (retErr error) {
 		logger.Info("Starting deprecated MCP stdio transport")
 		stdio := server.NewStdioServer(mcpServer)
 		stdio.SetContextFunc(stdioContextFunc(localGrants))
+		// ServeStdio uses its own context; Listen must observe process shutdown
+		// even when the client leaves stdin open without completing a message.
 		stdioCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
 		return stdio.Listen(stdioCtx, os.Stdin, os.Stdout)
