@@ -3,7 +3,7 @@ module github.com/jaxxstorm/tailscale-mcp
 go 1.26.4
 
 require (
-	github.com/alecthomas/kong v1.16.0
+	github.com/alecthomas/kong v1.16.1
 	github.com/mark3labs/mcp-go v0.56.0
 	github.com/tailscale/hujson v0.0.0-20260718110524-10d7940d4c87
 	go.uber.org/zap v1.28.0
