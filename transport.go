@@ -29,6 +29,7 @@ type tailnetServer interface {
 	Start() error
 	Up(context.Context) (*ipnstate.Status, error)
 	Listen(network, addr string) (net.Listener, error)
+	Dial(context.Context, string, string) (net.Conn, error)
 	LocalClient() (*local.Client, error)
 	Close() error
 }
@@ -141,12 +142,12 @@ func expectedCancellation(ctx context.Context, err error) bool {
 	return err == context.Canceled
 }
 
-func endpointURL(host string, port int, tls bool) string {
+func endpointURL(host string, port int, tls bool, path string) string {
 	scheme := "http"
 	if tls {
 		scheme = "https"
 	}
-	return (&url.URL{Scheme: scheme, Host: net.JoinHostPort(host, strconv.Itoa(port)), Path: mcpEndpointPath}).String()
+	return (&url.URL{Scheme: scheme, Host: net.JoinHostPort(host, strconv.Itoa(port)), Path: path}).String()
 }
 
 func resolvePorts(port, localPort *int, tls, localHTTP, stdio bool) (tailnet, local int, err error) {

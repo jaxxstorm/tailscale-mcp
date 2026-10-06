@@ -27,6 +27,7 @@ archives:
       - README.md
       - docs/usage.md
       - docs/integration.md
+      - docs/aperture.md
     format_overrides:
       - goos: windows
         format: zip

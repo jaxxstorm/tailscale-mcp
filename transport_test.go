@@ -19,8 +19,11 @@ func TestStreamableHTTPTransportConstants(t *testing.T) {
 	if streamableHTTPTransportName != "Streamable HTTP" {
 		t.Fatalf("unexpected transport name %q", streamableHTTPTransportName)
 	}
-	if mcpEndpointPath != "/mcp" {
+	if mcpEndpointPath != "/tailscale/mcp" {
 		t.Fatalf("unexpected MCP endpoint path %q", mcpEndpointPath)
+	}
+	if apertureEndpointPath != "/aperture/mcp" {
+		t.Fatalf("unexpected Aperture endpoint path %q", apertureEndpointPath)
 	}
 }
 
