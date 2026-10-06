@@ -7,7 +7,7 @@ require (
 	github.com/mark3labs/mcp-go v0.56.0
 	github.com/tailscale/hujson v0.0.0-20260718110524-10d7940d4c87
 	go.uber.org/zap v1.28.0
-	golang.org/x/oauth2 v0.36.0
+	golang.org/x/oauth2 v0.37.0
 	golang.org/x/term v0.45.0
 	gopkg.in/yaml.v3 v3.0.1
 	tailscale.com v1.100.0
