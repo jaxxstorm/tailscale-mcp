@@ -34,6 +34,9 @@ type apertureTransportFixture struct {
 	whoIsCalls  atomic.Int64
 }
 
+// These tests exercise sessions, which newer MCP protocol versions retire.
+const sessionProtocolVersion = "2025-03-26"
+
 func newApertureTransportFixture(t *testing.T, localCaps *MCPCapability) *apertureTransportFixture {
 	t.Helper()
 	oldLogger := logger
@@ -130,7 +133,7 @@ func apertureTransportRPC(t *testing.T, s *httptest.Server, path, session, metho
 	req.Header.Set("Accept", "application/json, text/event-stream")
 	req.Header.Set("Origin", s.URL)
 	req.Header.Set("Mcp-Session-Id", session)
-	req.Header.Set("MCP-Protocol-Version", mcp.LATEST_PROTOCOL_VERSION)
+	req.Header.Set("MCP-Protocol-Version", sessionProtocolVersion)
 	req.Header.Set("X-Tailscale-Capabilities", `{"tools":["*"],"resources":["*"]}`)
 	req.Header.Set("X-Tailscale-User", "admin")
 	res, err := s.Client().Do(req)
@@ -149,7 +152,7 @@ func apertureTransportRPC(t *testing.T, s *httptest.Server, path, session, metho
 
 func apertureTransportInitialize(t *testing.T, s *httptest.Server, path string) string {
 	t.Helper()
-	status, session, response := apertureTransportRPC(t, s, path, "", "initialize", map[string]any{"protocolVersion": mcp.LATEST_PROTOCOL_VERSION, "capabilities": map[string]any{}, "clientInfo": map[string]string{"name": "aperture-transport-test", "version": "1"}})
+	status, session, response := apertureTransportRPC(t, s, path, "", "initialize", map[string]any{"protocolVersion": sessionProtocolVersion, "capabilities": map[string]any{}, "clientInfo": map[string]string{"name": "aperture-transport-test", "version": "1"}})
 	if status != http.StatusOK || response["error"] != nil || !bytes.Contains(response["result"], []byte(`"serverInfo"`)) || session == "" {
 		t.Fatalf("initialize %s: status=%d session=%q response=%s", path, status, session, response)
 	}
