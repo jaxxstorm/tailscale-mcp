@@ -1,0 +1,10 @@
+source_url: http://ai/aperture/openapi.json
+retrieved_at: 2026-10-06
+snapshot: openapi.json
+sha256: 999c9eb9c3083adc28a8dd3dac94892d2857174e2df56a34ee2932efca2036d5
+openapi_version: 3.1.0
+api_title: Aperture API
+api_version: "0"
+operation_count: 5
+path_count: 4
+notes: Tailnet-only source. Refresh explicitly while connected; builds and tests use the cached snapshot.

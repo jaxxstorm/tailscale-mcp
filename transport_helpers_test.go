@@ -322,38 +322,46 @@ func TestCoordinatedHTTPShutdown(t *testing.T) {
 			defer cancel()
 			release := make(chan struct{})
 			defer close(release)
-			started := make(chan struct{})
+			started := make(chan struct{}, 4)
 			listeners, err := acquireListeners(func() (net.Listener, error) { return net.Listen("tcp", "127.0.0.1:0") }, func() (net.Listener, error) { return net.Listen("tcp", "127.0.0.1:0") })
 			if err != nil {
 				t.Fatal(err)
 			}
-			stream := newHTTPServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			streamHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
 				fmt.Fprint(w, "data: open\n\n")
 				w.(http.Flusher).Flush()
-				close(started)
+				started <- struct{}{}
 				if stubborn {
 					<-release
 				} else {
 					<-r.Context().Done()
 				}
-			}))
-			local := newHTTPServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) }))
+			})
+			handler := mcpHTTPHandler(streamHandler, streamHandler, func(next http.Handler) http.Handler { return next })
+			stream := newHTTPServer(handler)
+			local := newHTTPServer(handler)
 			done := make(chan error, 1)
 			go func() {
 				done <- serveHTTPServers(ctx, 100*time.Millisecond, httpServerListener{stream, listeners[0]}, httpServerListener{local, listeners[1]})
 			}()
 			client := &http.Client{Timeout: 3 * time.Second}
-			res, err := client.Get("http://" + listeners[0].Addr().String())
-			if err != nil {
-				t.Fatal(err)
+			var responses []*http.Response
+			for _, listener := range listeners {
+				for _, path := range []string{mcpEndpointPath, apertureEndpointPath} {
+					res, err := client.Get("http://" + listener.Addr().String() + path)
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer res.Body.Close()
+					if res.StatusCode != http.StatusOK {
+						t.Fatalf("stream %s: %d", path, res.StatusCode)
+					}
+					responses = append(responses, res)
+					<-started
+				}
 			}
-			defer res.Body.Close()
-			<-started
-			localRes, err := client.Get("http://" + listeners[1].Addr().String())
-			if err != nil {
-				t.Fatal(err)
-			}
-			localRes.Body.Close()
+			shutdownStarted := time.Now()
 			cancel()
 			// Local acceptance must stop even while a stubborn stream is draining.
 			until := time.Now().Add(80 * time.Millisecond)
@@ -379,9 +387,16 @@ func TestCoordinatedHTTPShutdown(t *testing.T) {
 			case <-time.After(2 * time.Second):
 				t.Fatal("shutdown hung")
 			}
-			if stubborn {
-				if _, err := io.ReadAll(res.Body); err == nil {
+			if time.Since(shutdownStarted) > 350*time.Millisecond {
+				t.Fatal("streams exceeded shared shutdown budget")
+			}
+			for _, res := range responses {
+				_, err := io.ReadAll(res.Body)
+				if stubborn && err == nil {
 					t.Fatal("stubborn stream was not force closed")
+				}
+				if !stubborn && err != nil {
+					t.Fatalf("stream did not drain: %v", err)
 				}
 			}
 		})

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/alecthomas/kong"
+	"github.com/jaxxstorm/tailscale-mcp/internal/aperture"
 	"github.com/jaxxstorm/tailscale-mcp/internal/readapi"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -42,6 +43,7 @@ import (
 )
 
 type CLI struct {
+	ApertureURL   string `name:"aperture-url" env:"APERTURE_URL" default:"http://ai/aperture" help:"Aperture API base URL accessed through the MCP node's Tailscale identity"`
 	Tailnet       string `env:"TAILSCALE_TAILNET" help:"Tailnet name required when serving MCP"`
 	Credential    string `env:"TAILSCALE_OAUTH_TOKEN" help:"OAuth, federated, or bearer credential required for Tailscale startup and API access"`
 	OAuthClientID string `name:"oauth-client-id" env:"TAILSCALE_OAUTH_CLIENT_ID" help:"OAuth client ID to use when TAILSCALE_OAUTH_TOKEN is a raw tskey-client secret"`
@@ -64,7 +66,9 @@ type CLI struct {
 const (
 	mcpServerName               = "ts-mcp"
 	streamableHTTPTransportName = "Streamable HTTP"
-	mcpEndpointPath             = "/mcp"
+	mcpEndpointPath             = "/tailscale/mcp"
+	legacyMCPEndpointPath       = "/mcp"
+	apertureEndpointPath        = "/aperture/mcp"
 	tailscaleOAuthTokenEnv      = "TAILSCALE_OAUTH_TOKEN"
 )
 
@@ -702,9 +706,12 @@ func loggingMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func mcpHTTPHandler(streamable http.Handler, authorize func(http.Handler) http.Handler) http.Handler {
+func mcpHTTPHandler(streamable, apertureStreamable http.Handler, authorize func(http.Handler) http.Handler) http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle(mcpEndpointPath, authorize(streamable))
+	tailscaleHandler := authorize(streamable)
+	mux.Handle(mcpEndpointPath, tailscaleHandler)
+	mux.Handle(legacyMCPEndpointPath, tailscaleHandler)
+	mux.Handle(apertureEndpointPath, authorize(apertureStreamable))
 	return loggingMiddleware(strictOriginMiddleware(bodyLimitMiddleware(mux, 0)))
 }
 
@@ -736,7 +743,7 @@ func run(ctx context.Context, cli CLI) (retErr error) {
 		return nil
 	}
 	if cli.ListGroups {
-		return writeToolGroups(os.Stdout, cli.LocalCLI)
+		return writeToolGroups(os.Stdout, cli.LocalCLI, cli.Stdio)
 	}
 	if strings.TrimSpace(cli.Tailnet) == "" {
 		return errors.New("TAILSCALE_TAILNET is required when serving MCP")
@@ -751,6 +758,11 @@ func run(ctx context.Context, cli CLI) (retErr error) {
 	}
 	if err := validateLocalHTTP(cli.LocalHTTP, cli.Stdio, localGrants); err != nil {
 		return err
+	}
+	if !cli.Stdio {
+		if err := aperture.ValidateBaseURL(cli.ApertureURL); err != nil {
+			return err
+		}
 	}
 	logger.Info("Starting ts-mcp",
 		zap.String("version", buildVersion),
@@ -854,8 +866,21 @@ func serveMCPHTTP(ctx context.Context, tsServer tailnetServer, mcpServer *server
 	if err != nil {
 		return fmt.Errorf("tailnet local client: %w", err)
 	}
+	apertureTransport := http.DefaultTransport.(*http.Transport).Clone()
+	apertureTransport.Proxy = nil
+	apertureTransport.DialContext = tsServer.Dial
+	apertureClient, err := aperture.NewClient(cli.ApertureURL, apertureTransport)
+	if err != nil {
+		return err
+	}
+	defer apertureClient.CloseIdleConnections()
+	apertureServer, _, err := newApertureMCPServer(apertureClient)
+	if err != nil {
+		return err
+	}
 	streamable := server.NewStreamableHTTPServer(mcpServer, server.WithEndpointPath(mcpEndpointPath))
-	tailnetHandler, err := tailnetHostMiddleware(mcpHTTPHandler(streamable, func(next http.Handler) http.Handler {
+	apertureStreamable := server.NewStreamableHTTPServer(apertureServer, server.WithEndpointPath(apertureEndpointPath))
+	tailnetHandler, err := tailnetHostMiddleware(mcpHTTPHandler(streamable, apertureStreamable, func(next http.Handler) http.Handler {
 		return peerGrantMiddleware(next, localClient.WhoIs)
 	}), status, port, cli.TLS)
 	if err != nil {
@@ -877,12 +902,14 @@ func serveMCPHTTP(ctx context.Context, tsServer tailnetServer, mcpServer *server
 	if status.Self != nil && status.Self.DNSName != "" {
 		host = strings.TrimSuffix(status.Self.DNSName, ".")
 	}
-	logger.Info("Serving MCP via Tailscale", zap.String("transport", streamableHTTPTransportName), zap.String("url", endpointURL(host, port, cli.TLS)))
+	logger.Info("Serving MCP via Tailscale", zap.String("transport", streamableHTTPTransportName), zap.String("url", endpointURL(host, port, cli.TLS, mcpEndpointPath)))
+	logger.Info("Serving Aperture MCP via Tailscale", zap.String("transport", streamableHTTPTransportName), zap.String("url", endpointURL(host, port, cli.TLS, apertureEndpointPath)))
 	bindings := []httpServerListener{{Server: newHTTPServer(tailnetHandler), Listener: listeners[0]}}
 	if cli.LocalHTTP {
-		localHandler := mcpHTTPHandler(streamable, func(next http.Handler) http.Handler { return localGrantMiddleware(next, localGrants) })
+		localHandler := mcpHTTPHandler(streamable, apertureStreamable, func(next http.Handler) http.Handler { return localGrantMiddleware(next, localGrants) })
 		bindings = append(bindings, httpServerListener{Server: newHTTPServer(localHandler), Listener: listeners[1]})
-		logger.Warn("Trusted loopback MCP enabled for every process able to connect", zap.String("url", endpointURL("127.0.0.1", localPort, false)))
+		logger.Warn("Trusted loopback MCP enabled for every process able to connect", zap.String("url", endpointURL("127.0.0.1", localPort, false, mcpEndpointPath)))
+		logger.Info("Serving Aperture MCP on trusted loopback", zap.String("transport", streamableHTTPTransportName), zap.String("url", endpointURL("127.0.0.1", localPort, false, apertureEndpointPath)))
 	}
 	return serveHTTPServers(ctx, 0, bindings...)
 }

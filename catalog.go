@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"sort"
 
+	"github.com/jaxxstorm/tailscale-mcp/internal/aperture"
 	"github.com/jaxxstorm/tailscale-mcp/internal/curatedtools"
 	"github.com/jaxxstorm/tailscale-mcp/internal/readapi"
 	"github.com/jaxxstorm/tailscale-mcp/internal/toolmeta"
@@ -49,14 +51,49 @@ func newConfiguredMCPServer(tsClient *tsapi.Client, readClient readapi.Client, l
 }
 
 // writeToolGroups builds the configured surface without contacting either API.
-func writeToolGroups(w io.Writer, localCLI bool) error {
+func writeToolGroups(w io.Writer, localCLI, stdio bool) error {
 	_, catalog, err := newConfiguredMCPServer(nil, readapi.Client{}, localCLI)
 	if err != nil {
 		return err
 	}
+	tools := catalog.Tools()
+	if !stdio {
+		_, apertureCatalog, err := newApertureMCPServer(aperture.Client{})
+		if err != nil {
+			return err
+		}
+		tools = append(tools, apertureCatalog.Tools()...)
+	}
+	sort.Slice(tools, func(i, j int) bool { return tools[i].Name < tools[j].Name })
 	encoder := json.NewEncoder(w)
 	encoder.SetIndent("", "  ")
-	return encoder.Encode(catalog.Tools())
+	return encoder.Encode(tools)
+}
+
+func newApertureMCPServer(client aperture.Client) (*server.MCPServer, *toolmeta.Catalog, error) {
+	catalog, err := toolmeta.New(aperture.ToolMetadata())
+	if err != nil {
+		return nil, nil, err
+	}
+	check := toolAccessChecker(catalog)
+	s := server.NewMCPServer("aperture-mcp", buildVersion,
+		server.WithInputSchemaValidation(),
+		server.WithToolFilter(func(ctx context.Context, tools []mcp.Tool) []mcp.Tool {
+			allowed := make([]mcp.Tool, 0, len(tools))
+			for _, tool := range tools {
+				if check(ctx, tool.Name) == nil {
+					allowed = append(allowed, tool)
+				}
+			}
+			return allowed
+		}),
+		server.WithToolHandlerMiddleware(recoverTool),
+	)
+	aperture.RegisterTools(s, client, check)
+	if err := catalog.Validate(s.ListTools()); err != nil {
+		return nil, nil, err
+	}
+	return s, catalog, nil
 }
 
 func recoverTool(next server.ToolHandlerFunc) server.ToolHandlerFunc {

@@ -69,6 +69,7 @@ func TestStartupIntegrationProcess(t *testing.T) {
 		return
 	}
 	if mode == "signals" || mode == "serve-failure" {
+		logger = zap.NewNop()
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 		var bindings []httpServerListener
@@ -79,16 +80,13 @@ func TestStartupIntegrationProcess(t *testing.T) {
 				t.Fatal(err)
 			}
 			addresses = append(addresses, listener.Addr().String())
-			bindings = append(bindings, httpServerListener{newHTTPServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.URL.Path == "/stream" {
-					w.Header().Set("Content-Type", "text/event-stream")
-					fmt.Fprint(w, "data: ready\n\n")
-					w.(http.Flusher).Flush()
-					<-r.Context().Done()
-					return
-				}
-				w.WriteHeader(http.StatusNoContent)
-			})), listener})
+			stream := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				fmt.Fprint(w, "data: ready\n\n")
+				w.(http.Flusher).Flush()
+				<-r.Context().Done()
+			})
+			bindings = append(bindings, httpServerListener{newHTTPServer(mcpHTTPHandler(stream, stream, func(next http.Handler) http.Handler { return next })), listener})
 		}
 		if mode == "serve-failure" {
 			bindings[0].Listener = failedTransportListener{bindings[0].Listener, errors.New("startup injected accept failure")}
@@ -195,6 +193,9 @@ func TestStartupIntegrationCLI(t *testing.T) {
 			if _, err := parser.Parse(tc.args); err != nil {
 				t.Fatal(err)
 			}
+			if cli.ApertureURL != "http://ai/aperture" {
+				t.Fatalf("default Aperture URL=%q", cli.ApertureURL)
+			}
 			if (cli.Port != nil) != tc.explicitPort || (cli.LocalPort != nil) != tc.explicitLocal {
 				t.Fatalf("pointer presence lost: port=%v local=%v", cli.Port, cli.LocalPort)
 			}
@@ -210,12 +211,12 @@ func TestStartupIntegrationCLI(t *testing.T) {
 }
 
 func TestStartupIntegrationOffline(t *testing.T) {
-	for _, args := range [][]string{{"--version"}, {"--list-groups"}, {"--list-groups", "--local-cli"}} {
+	for _, args := range [][]string{{"--version"}, {"--list-groups"}, {"--list-groups", "--local-cli"}, {"--list-groups", "--stdio"}} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			var previous []byte
 			for range 2 {
 				// Invalid serving-only configuration must not block informational commands.
-				cmd, stderr := startupCommand(t, "offline", append(args, "--state=invalid://must-not-initialize", "--local-grants={", "--port=0")...)
+				cmd, stderr := startupCommand(t, "offline", append(args, "--state=invalid://must-not-initialize", "--local-grants={", "--port=0", "--aperture-url=invalid://must-not-initialize")...)
 				output, err := cmd.Output()
 				if err != nil {
 					t.Fatalf("offline main: %v\n%s", err, stderr)
@@ -226,7 +227,7 @@ func TestStartupIntegrationOffline(t *testing.T) {
 					}
 				} else {
 					var expected bytes.Buffer
-					if err := writeToolGroups(&expected, len(args) == 2); err != nil {
+					if err := writeToolGroups(&expected, len(args) == 2 && args[1] == "--local-cli", len(args) == 2 && args[1] == "--stdio"); err != nil {
 						t.Fatal(err)
 					}
 					if !bytes.Equal(output, expected.Bytes()) {
@@ -263,6 +264,35 @@ func TestStartupIntegrationRejectsLocalConfigBeforeNetwork(t *testing.T) {
 				t.Fatalf("configuration rejection: %v %s", err, stderr)
 			}
 		})
+	}
+}
+
+func TestStartupIntegrationURLConfiguration(t *testing.T) {
+	for _, raw := range []string{"", "ai/aperture", "ftp://ai/aperture", "http://user:secret@ai/aperture", "http://ai/aperture?x=1", "http://ai/aperture#fragment"} {
+		t.Run(raw, func(t *testing.T) {
+			cmd, stderr := startupCommand(t, "offline", "--tailnet=test", "--credential=test-only-token", "--aperture-url="+raw)
+			if err := cmd.Run(); err == nil || !strings.Contains(strings.ToLower(stderr.String()), "aperture") || strings.Contains(stderr.String(), "offline startup attempted HTTP") {
+				t.Fatalf("URL was not rejected before network access: %v %s", err, stderr)
+			}
+		})
+	}
+	t.Setenv("APERTURE_URL", "https://env.example/custom/aperture/")
+	for _, args := range [][]string{nil, {"--aperture-url=http://flag.example/prefix/"}} {
+		var cli CLI
+		parser, err := kong.New(&cli)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := parser.Parse(args); err != nil {
+			t.Fatal(err)
+		}
+		want := "https://env.example/custom/aperture/"
+		if len(args) != 0 {
+			want = "http://flag.example/prefix/"
+		}
+		if cli.ApertureURL != want {
+			t.Fatalf("Aperture URL=%q want=%q", cli.ApertureURL, want)
+		}
 	}
 }
 
@@ -358,7 +388,7 @@ func TestStartupIntegrationConfiguredTransports(t *testing.T) {
 						grant["tools"] = selectors
 					}
 					raw, _ := json.Marshal(grant)
-					args := []string{"--stdio", "--local-cli", "--tailnet=test", `--credential={"type":"oauth","clientId":"test","clientSecret":"test-only-secret"}`, "--state=invalid://stdio-must-ignore"}
+					args := []string{"--stdio", "--local-cli", "--tailnet=test", `--credential={"type":"oauth","clientId":"test","clientSecret":"test-only-secret"}`, "--state=invalid://stdio-must-ignore", "--aperture-url=invalid://stdio-must-ignore"}
 					if selectors != nil {
 						args = append(args, "--local-grants="+string(raw))
 					}
@@ -425,7 +455,7 @@ func TestStartupIntegrationConfiguredTransports(t *testing.T) {
 						})
 					}
 				}
-				httpServer := httptest.NewServer(mcpHTTPHandler(sdk, authorize))
+				httpServer := httptest.NewServer(mcpHTTPHandler(sdk, http.NotFoundHandler(), authorize))
 				defer httpServer.Close()
 				httpServer.Client().Timeout = 5 * time.Second
 				var session string
@@ -506,8 +536,11 @@ func TestStartupIntegrationTLSSelection(t *testing.T) {
 		{"127.0.0.1", 9090, false, "http://127.0.0.1:9090/mcp"},
 		{"::1", 8080, false, "http://[::1]:8080/mcp"},
 	} {
-		if got := endpointURL(tc.host, tc.port, tc.tls); got != tc.want {
-			t.Errorf("endpoint=%q want=%q", got, tc.want)
+		for _, path := range []string{mcpEndpointPath, apertureEndpointPath} {
+			want := strings.TrimSuffix(tc.want, "/mcp") + path
+			if got := endpointURL(tc.host, tc.port, tc.tls, path); got != want {
+				t.Errorf("endpoint=%q want=%q", got, want)
+			}
 		}
 	}
 }
@@ -520,7 +553,7 @@ func TestStartupIntegrationTLSScheme(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := mcpHTTPHandler(server.NewStreamableHTTPServer(configured), func(next http.Handler) http.Handler { return localGrantMiddleware(next, nil) })
+	handler := mcpHTTPHandler(server.NewStreamableHTTPServer(configured, server.WithEndpointPath(mcpEndpointPath)), server.NewStreamableHTTPServer(server.NewMCPServer("aperture-tls-test", "test"), server.WithEndpointPath(apertureEndpointPath)), func(next http.Handler) http.Handler { return localGrantMiddleware(next, nil) })
 	for _, secure := range []bool{false, true} {
 		s := httptest.NewUnstartedServer(handler)
 		if secure {
@@ -530,36 +563,38 @@ func TestStartupIntegrationTLSScheme(t *testing.T) {
 		}
 		t.Cleanup(s.Close)
 		s.Client().Timeout = 5 * time.Second
-		for _, matching := range []bool{false, true} {
-			origin := s.URL
-			forwarded := "http"
-			if !secure {
-				forwarded = "https"
-			}
-			if !matching {
-				origin = forwarded + "://" + strings.SplitN(s.URL, "://", 2)[1]
-			}
-			req, _ := http.NewRequest("POST", s.URL+mcpEndpointPath, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"tls-test","version":"1"}}}`))
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Accept", "application/json, text/event-stream")
-			req.Header.Set("Origin", origin)
-			req.Header.Set("X-Forwarded-Proto", forwarded)
-			req.Header.Set("Forwarded", "proto="+forwarded)
-			res, err := s.Client().Do(req)
-			if err != nil {
-				t.Fatal(err)
-			}
-			body, _ := io.ReadAll(res.Body)
-			res.Body.Close()
-			want := http.StatusForbidden
-			if matching {
-				want = http.StatusOK
-			}
-			if res.StatusCode != want || (matching && !bytes.Contains(body, []byte(`"serverInfo"`))) {
-				t.Fatalf("TLS=%v matching=%v: %d %s", secure, matching, res.StatusCode, body)
-			}
-			if secure && (res.TLS == nil || res.TLS.Version < tls.VersionTLS12) {
-				t.Fatal("no real TLS handshake")
+		for _, path := range []string{mcpEndpointPath, apertureEndpointPath} {
+			for _, matching := range []bool{false, true} {
+				origin := s.URL
+				forwarded := "http"
+				if !secure {
+					forwarded = "https"
+				}
+				if !matching {
+					origin = forwarded + "://" + strings.SplitN(s.URL, "://", 2)[1]
+				}
+				req, _ := http.NewRequest("POST", s.URL+path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"tls-test","version":"1"}}}`))
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Accept", "application/json, text/event-stream")
+				req.Header.Set("Origin", origin)
+				req.Header.Set("X-Forwarded-Proto", forwarded)
+				req.Header.Set("Forwarded", "proto="+forwarded)
+				res, err := s.Client().Do(req)
+				if err != nil {
+					t.Fatal(err)
+				}
+				body, _ := io.ReadAll(res.Body)
+				res.Body.Close()
+				want := http.StatusForbidden
+				if matching {
+					want = http.StatusOK
+				}
+				if res.StatusCode != want || (matching && !bytes.Contains(body, []byte(`"serverInfo"`))) {
+					t.Fatalf("TLS=%v matching=%v: %d %s", secure, matching, res.StatusCode, body)
+				}
+				if secure && (res.TLS == nil || res.TLS.Version < tls.VersionTLS12) {
+					t.Fatal("no real TLS handshake")
+				}
 			}
 		}
 		s.Close()
@@ -582,18 +617,19 @@ func TestStartupIntegrationSignals(t *testing.T) {
 				t.Fatal(err)
 			}
 			client := &http.Client{Timeout: 5 * time.Second}
-			stream, err := client.Get("http://" + addresses[0] + "/stream")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer stream.Body.Close()
-			local, err := client.Get("http://" + addresses[1] + "/local")
-			if err != nil {
-				t.Fatal(err)
-			}
-			local.Body.Close()
-			if local.StatusCode != 204 {
-				t.Fatalf("local status=%d", local.StatusCode)
+			var streams []*http.Response
+			for _, addr := range addresses {
+				for _, path := range []string{mcpEndpointPath, apertureEndpointPath} {
+					stream, err := client.Get("http://" + addr + path)
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer stream.Body.Close()
+					if stream.StatusCode != http.StatusOK {
+						t.Fatalf("stream %s: status=%d", path, stream.StatusCode)
+					}
+					streams = append(streams, stream)
+				}
 			}
 			if err := cmd.Process.Signal(sig); err != nil {
 				t.Fatal(err)
@@ -601,8 +637,10 @@ func TestStartupIntegrationSignals(t *testing.T) {
 			if err := cmd.Wait(); err != nil {
 				t.Fatalf("signal shutdown: %v %s", err, stderr)
 			}
-			if _, err := io.ReadAll(stream.Body); err != nil {
-				t.Fatalf("stream did not drain normally: %v", err)
+			for _, stream := range streams {
+				if _, err := io.ReadAll(stream.Body); err != nil {
+					t.Fatalf("stream did not drain normally: %v", err)
+				}
 			}
 			for _, addr := range addresses {
 				conn, err := net.DialTimeout("tcp", addr, time.Second)

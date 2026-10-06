@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -27,6 +29,7 @@ type testTailnetServer struct {
 	start  func() error
 	up     func(context.Context) (*ipnstate.Status, error)
 	listen func(string, string) (net.Listener, error)
+	dial   func(context.Context, string, string) (net.Conn, error)
 	client func() (*local.Client, error)
 	close  func() error
 }
@@ -37,7 +40,10 @@ func (s testTailnetServer) Listen(network, addr string) (net.Listener, error) {
 	return s.listen(network, addr)
 }
 func (s testTailnetServer) LocalClient() (*local.Client, error) { return s.client() }
-func (s testTailnetServer) Close() error                        { return s.close() }
+func (s testTailnetServer) Dial(ctx context.Context, network, addr string) (net.Conn, error) {
+	return s.dial(ctx, network, addr)
+}
+func (s testTailnetServer) Close() error { return s.close() }
 
 func readyTailnetStatus() *ipnstate.Status {
 	return &ipnstate.Status{
@@ -68,7 +74,7 @@ func TestTailnetReadinessCancellationBeforeBinding(t *testing.T) {
 			}
 			done := make(chan error, 1)
 			go func() {
-				done <- serveMCPHTTP(ctx, ts, nil, CLI{TLS: secure, LocalHTTP: true}, 443, 8080, &MCPCapability{Tools: []string{"*"}})
+				done <- serveMCPHTTP(ctx, ts, nil, CLI{ApertureURL: "http://ai/aperture", TLS: secure, LocalHTTP: true}, 443, 8080, &MCPCapability{Tools: []string{"*"}})
 			}()
 			<-waiting
 			cancel()
@@ -97,7 +103,7 @@ func TestTailnetInitializationNeverRacesClose(t *testing.T) {
 		close: func() error { closes.Add(1); return nil },
 	}
 	done := make(chan error, 1)
-	go func() { done <- serveMCPHTTP(ctx, ts, nil, CLI{}, 8080, 8080, nil) }()
+	go func() { done <- serveMCPHTTP(ctx, ts, nil, CLI{ApertureURL: "http://ai/aperture"}, 8080, 8080, nil) }()
 	<-starting
 	cancel()
 	select {
@@ -117,7 +123,7 @@ func TestTailnetInitializationNeverRacesClose(t *testing.T) {
 	}
 	// This SDK failure occurs before s.sys exists. Calling Close after it would
 	// panic; Start's own close-on-error pool is the appropriate cleanup path.
-	err := serveMCPHTTP(context.Background(), &tsnet.Server{Store: new(mem.Store)}, nil, CLI{}, 8080, 8080, nil)
+	err := serveMCPHTTP(context.Background(), &tsnet.Server{Store: new(mem.Store)}, nil, CLI{ApertureURL: "http://ai/aperture"}, 8080, 8080, nil)
 	if err == nil || !strings.Contains(err.Error(), "in-memory store") {
 		t.Fatalf("SDK initialization error = %v", err)
 	}
@@ -144,7 +150,7 @@ func TestTailnetStartupErrorPreservation(t *testing.T) {
 		up:    func(context.Context) (*ipnstate.Status, error) { cancel(); return nil, context.Canceled },
 		close: func() error { return failure },
 	}
-	err := serveMCPHTTP(ctx, ts, nil, CLI{}, 8080, 8080, nil)
+	err := serveMCPHTTP(ctx, ts, nil, CLI{ApertureURL: "http://ai/aperture"}, 8080, 8080, nil)
 	if !errors.Is(err, failure) || expectedCancellation(ctx, err) {
 		t.Fatalf("cleanup failure hidden: %v", err)
 	}
@@ -159,10 +165,10 @@ func TestRunExpectedStartupCancellation(t *testing.T) {
 	http.DefaultTransport = credentialRoundTripFunc(func(r *http.Request) (*http.Response, error) {
 		return nil, r.Context().Err()
 	})
-	if err := run(ctx, CLI{Tailnet: "test", Credential: "test-only-token"}); err != nil {
+	if err := run(ctx, CLI{ApertureURL: "http://ai/aperture", Tailnet: "test", Credential: "test-only-token"}); err != nil {
 		t.Fatalf("expected cancellation returned failure: %v", err)
 	}
-	if err := run(ctx, CLI{Tailnet: "test", Credential: "{"}); err == nil {
+	if err := run(ctx, CLI{ApertureURL: "http://ai/aperture", Tailnet: "test", Credential: "{"}); err == nil {
 		t.Fatal("signal suppressed invalid configuration")
 	}
 }
@@ -269,7 +275,10 @@ func TestTailnetCanonicalHostProductionStack(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer l.Close()
-	var whoCalls atomic.Int32
+	var whoCalls, dialCalls atomic.Int32
+	var unavailable atomic.Bool
+	t.Setenv("HTTP_PROXY", "http://proxy.invalid:1234")
+	t.Setenv("HTTPS_PROXY", "http://proxy.invalid:1234")
 	lc := &local.Client{OmitAuth: true, Transport: credentialRoundTripFunc(func(r *http.Request) (*http.Response, error) {
 		whoCalls.Add(1)
 		if r.URL.Path != "/localapi/v0/whois" || r.URL.Query().Get("addr") != "100.64.0.2:12345" {
@@ -282,11 +291,42 @@ func TestTailnetCanonicalHostProductionStack(t *testing.T) {
 		up:     func(context.Context) (*ipnstate.Status, error) { return readyTailnetStatus(), nil },
 		client: func() (*local.Client, error) { return lc, nil },
 		listen: func(string, string) (net.Listener, error) { return tailnetRemoteListener{l}, nil },
-		close:  func() error { return nil },
+		dial: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			dialCalls.Add(1)
+			if network != "tcp" || addr != "ai:80" {
+				t.Errorf("Aperture dial=%q %q", network, addr)
+			}
+			if unavailable.Load() {
+				return nil, errors.New("Aperture unavailable")
+			}
+			client, backend := net.Pipe()
+			go func() {
+				defer backend.Close()
+				_ = backend.SetDeadline(time.Now().Add(3 * time.Second))
+				req, err := http.ReadRequest(bufio.NewReader(backend))
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				defer req.Body.Close()
+				if req.Method != http.MethodGet || req.URL.Path != "/custom/aperture/pricing" {
+					t.Errorf("upstream request=%s %s", req.Method, req.URL)
+				}
+				for _, header := range []string{"Authorization", "Cookie", "X-Tailscale-User"} {
+					if req.Header.Get(header) != "" {
+						t.Errorf("forwarded %s", header)
+					}
+				}
+				body := `{"currency":"USD","cost_bases":["retail"],"units":{},"models":{},"configured_adjustments":{"providers":{}}}`
+				fmt.Fprintf(backend, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
+			}()
+			return client, nil
+		},
+		close: func() error { return nil },
 	}
 	done := make(chan error, 1)
 	go func() {
-		done <- serveMCPHTTP(ctx, ts, server.NewMCPServer("host-test", "test"), CLI{Hostname: "untrusted-cli-alias"}, 8080, 9090, nil)
+		done <- serveMCPHTTP(ctx, ts, server.NewMCPServer("host-test", "test"), CLI{ApertureURL: "http://ai/custom/aperture/", Hostname: "untrusted-cli-alias"}, 8080, 9090, nil)
 	}()
 	defer func() {
 		cancel()
@@ -295,32 +335,86 @@ func TestTailnetCanonicalHostProductionStack(t *testing.T) {
 		}
 	}()
 	client := &http.Client{Timeout: 3 * time.Second}
+	sessions := make(map[string]string)
 	for _, host := range []string{"attacker.example:8080", "untrusted-cli-alias:8080", "mcp.example.ts.net.evil:8080", "mcp.example.ts.net:9090", "mcp.example.ts.net", "localhost:8080", "mcp.example.ts.net:8080", "MCP:8080", "100.64.0.1:8080", "[fd7a:115c:a1e0::1]:8080"} {
-		for _, withOrigin := range []bool{false, true} {
-			req, _ := http.NewRequest("POST", "http://"+l.Addr().String()+"/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"host-test","version":"1"}}}`))
-			req.Host = host
-			if withOrigin {
-				req.Header.Set("Origin", "http://"+host)
-			}
-			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("Accept", "application/json, text/event-stream")
-			req.Header.Set("Forwarded", "host=mcp.example.ts.net:8080;proto=http")
-			req.Header.Set("X-Forwarded-Host", "mcp.example.ts.net:8080")
-			before := whoCalls.Load()
-			res, err := client.Do(req)
-			if err != nil {
-				t.Fatal(err)
-			}
-			body, _ := io.ReadAll(res.Body)
-			res.Body.Close()
-			allowed := host == "mcp.example.ts.net:8080" || host == "MCP:8080" || host == "100.64.0.1:8080" || host == "[fd7a:115c:a1e0::1]:8080"
-			if allowed {
-				if res.StatusCode != 200 || !strings.Contains(string(body), "serverInfo") || whoCalls.Load() != before+1 {
-					t.Fatalf("canonical host %s origin=%v: %d %s", host, withOrigin, res.StatusCode, body)
+		for _, path := range []string{mcpEndpointPath, apertureEndpointPath} {
+			for _, withOrigin := range []bool{false, true} {
+				req, _ := http.NewRequest("POST", "http://"+l.Addr().String()+path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"host-test","version":"1"}}}`))
+				req.Host = host
+				if withOrigin {
+					req.Header.Set("Origin", "http://"+host)
 				}
-			} else if res.StatusCode != 403 || whoCalls.Load() != before {
-				t.Fatalf("untrusted host %s origin=%v: %d %s", host, withOrigin, res.StatusCode, body)
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Accept", "application/json, text/event-stream")
+				req.Header.Set("Forwarded", "host=mcp.example.ts.net:8080;proto=http")
+				req.Header.Set("X-Forwarded-Host", "mcp.example.ts.net:8080")
+				before := whoCalls.Load()
+				res, err := client.Do(req)
+				if err != nil {
+					t.Fatal(err)
+				}
+				body, _ := io.ReadAll(res.Body)
+				res.Body.Close()
+				allowed := host == "mcp.example.ts.net:8080" || host == "MCP:8080" || host == "100.64.0.1:8080" || host == "[fd7a:115c:a1e0::1]:8080"
+				if allowed {
+					sessions[path] = res.Header.Get("Mcp-Session-Id")
+					if res.StatusCode != 200 || !strings.Contains(string(body), "serverInfo") || whoCalls.Load() != before+1 {
+						t.Fatalf("canonical host %s origin=%v: %d %s", host, withOrigin, res.StatusCode, body)
+					}
+				} else if res.StatusCode != 403 || whoCalls.Load() != before {
+					t.Fatalf("untrusted host %s origin=%v: %d %s", host, withOrigin, res.StatusCode, body)
+				}
 			}
+		}
+	}
+	if dialCalls.Load() != 0 {
+		t.Fatal("startup or initialization probed Aperture availability")
+	}
+	for _, fail := range []bool{false, true} {
+		unavailable.Store(fail)
+		req, _ := http.NewRequest("POST", "http://"+l.Addr().String()+apertureEndpointPath, strings.NewReader(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"aperture_get_pricing","arguments":{}}}`))
+		req.Host = "mcp.example.ts.net:8080"
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		req.Header.Set("Mcp-Session-Id", sessions[apertureEndpointPath])
+		req.Header.Set("Authorization", "Bearer caller-secret")
+		req.Header.Set("Cookie", "caller=secret")
+		req.Header.Set("X-Tailscale-User", "spoofed")
+		res, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var response struct {
+			Result struct {
+				IsError bool            `json:"isError"`
+				Content json.RawMessage `json:"content"`
+			} `json:"result"`
+			Error json.RawMessage `json:"error"`
+		}
+		err = json.NewDecoder(res.Body).Decode(&response)
+		res.Body.Close()
+		if err != nil || res.StatusCode != 200 || response.Error != nil || response.Result.IsError != fail {
+			t.Fatalf("Aperture unavailable=%v: status=%d response=%+v err=%v", fail, res.StatusCode, response, err)
+		}
+	}
+	if dialCalls.Load() != 2 {
+		t.Fatalf("tsnet dial calls=%d want=2", dialCalls.Load())
+	}
+	sessions[legacyMCPEndpointPath] = sessions[mcpEndpointPath]
+	for _, path := range []string{mcpEndpointPath, apertureEndpointPath, legacyMCPEndpointPath} {
+		req, _ := http.NewRequest("POST", "http://"+l.Addr().String()+path, strings.NewReader(`{"jsonrpc":"2.0","id":3,"method":"tools/list","params":{}}`))
+		req.Host = "mcp.example.ts.net:8080"
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		req.Header.Set("Mcp-Session-Id", sessions[path])
+		res, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		want := http.StatusOK
+		if res.StatusCode != want || res.Header.Get("Location") != "" {
+			t.Fatalf("route %s after upstream failure: status=%d", path, res.StatusCode)
 		}
 	}
 }
