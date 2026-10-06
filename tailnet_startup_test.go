@@ -318,7 +318,7 @@ func TestTailnetCanonicalHostProductionStack(t *testing.T) {
 					}
 				}
 				body := `{"currency":"USD","cost_bases":["retail"],"units":{},"models":{},"configured_adjustments":{"providers":{}}}`
-				fmt.Fprintf(backend, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
+				fmt.Fprintf(backend, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nETag: \"pricing-version\"\r\nConnection: close\r\nContent-Length: %d\r\n\r\n%s", len(body), body)
 			}()
 			return client, nil
 		},

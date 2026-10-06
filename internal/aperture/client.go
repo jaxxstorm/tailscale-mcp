@@ -154,10 +154,14 @@ func (c Client) call(ctx context.Context, op Operation, args map[string]any) (an
 		return nil, uncertain("Aperture request failed or was canceled")
 	}
 	defer resp.Body.Close()
+	bad := func() (any, error) { return nil, uncertain("Malformed or unexpected Aperture response") }
 	etag := resp.Header.Get("ETag")
 	if pricing && resp.StatusCode == http.StatusNotModified {
 		if etag == "" {
 			etag = validator
+		}
+		if len(resp.Header.Values("ETag")) > 1 || !concreteETag(strings.TrimPrefix(etag, "W/")) {
+			return bad()
 		}
 		return map[string]any{"etag": etag, "not_modified": true}, nil
 	}
@@ -186,6 +190,15 @@ func (c Client) call(ctx context.Context, op Operation, args map[string]any) (an
 		}
 		return nil, &toolError{Status: resp.StatusCode, Kind: "http", Message: fmt.Sprintf("HTTP %d: %s", resp.StatusCode, message)}
 	}
+	if op.ToolName != "aperture_validate_config" {
+		responseValidator := etag
+		if pricing {
+			responseValidator = strings.TrimPrefix(responseValidator, "W/")
+		}
+		if len(resp.Header.Values("ETag")) != 1 || !concreteETag(responseValidator) {
+			return bad()
+		}
+	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
 		return nil, uncertain("Unable to read complete Aperture response")
@@ -193,7 +206,6 @@ func (c Client) call(ctx context.Context, op Operation, args map[string]any) (an
 	if len(data) > maxResponseBytes {
 		return nil, uncertain("Aperture response exceeds 16 MiB; use exact-model pricing for a smaller catalog")
 	}
-	bad := func() (any, error) { return nil, uncertain("Malformed or unexpected Aperture response") }
 	if pricing {
 		data, err = hujson.Standardize(data)
 		if err != nil {

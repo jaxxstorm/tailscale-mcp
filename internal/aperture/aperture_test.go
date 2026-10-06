@@ -115,6 +115,112 @@ func TestConfigRequests(t *testing.T) {
 	}
 }
 
+func TestResponseETags(t *testing.T) {
+	for _, name := range []string{"get_config", "set_config", "get_pricing", "get_model_pricing"} {
+		for _, tc := range []struct {
+			name        string
+			tags        []string
+			valid, weak bool
+		}{
+			{name: "missing"},
+			{name: "empty", tags: []string{""}},
+			{name: "unquoted", tags: []string{"secret"}},
+			{name: "wildcard", tags: []string{"*"}},
+			{name: "list", tags: []string{`"one", "two"`}},
+			{name: "duplicate", tags: []string{`"one"`, `"two"`}},
+			{name: "control", tags: []string{"\"secret\x7f\""}},
+			{name: "strong", tags: []string{`"version"`}, valid: true},
+			{name: "empty opaque value", tags: []string{`""`}, valid: true},
+			{name: "weak", tags: []string{`W/"version"`}, valid: true, weak: true},
+		} {
+			t.Run(name+"/"+tc.name, func(t *testing.T) {
+				op := operation(name)
+				calls := 0
+				c := newTestClient(t, func(*http.Request) (*http.Response, error) {
+					calls++
+					body := `{"config":"{}"}`
+					if op.Group == "aperture-pricing" {
+						body = pricingBody
+					}
+					r := response(200, body)
+					r.Header.Del("ETag")
+					for _, tag := range tc.tags {
+						r.Header.Add("ETag", tag)
+					}
+					return r, nil
+				})
+				result, err := c.call(context.Background(), op, map[string]any{"config": "{}", "confirm": "aperture_set_config", "if_match": `"old"`, "model": "provider/model"})
+				valid := tc.valid && (!tc.weak || op.Group == "aperture-pricing")
+				if calls != 1 || (err == nil) != valid {
+					t.Fatalf("calls=%d result=%v error=%v", calls, result, err)
+				}
+				if valid {
+					if result.(map[string]any)["etag"] != tc.tags[0] {
+						t.Fatal("ETag was not preserved")
+					}
+				} else if result != nil || !strings.Contains(err.Error(), "Malformed") || strings.Contains(err.Error(), "secret") || strings.Contains(err.Error(), "uncertain") != (name == "set_config") {
+					t.Fatalf("unexpected failure: result=%v error=%v", result, err)
+				}
+			})
+		}
+	}
+	// Validation does not use a version validator.
+	c := newTestClient(t, func(*http.Request) (*http.Response, error) {
+		r := response(200, `{"valid":true,"errors":[]}`)
+		r.Header.Del("ETag")
+		return r, nil
+	})
+	if _, err := c.call(context.Background(), operation("validate_config"), map[string]any{"config": "{}"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNotModifiedETags(t *testing.T) {
+	for _, name := range []string{"get_pricing", "get_model_pricing"} {
+		for _, tc := range []struct {
+			name, tag, prior string
+			valid            bool
+		}{
+			{"strong", `"new"`, `"old"`, true},
+			{"weak", `W/"new"`, `"old"`, true},
+			{"fallback", "", `"old"`, true},
+			{"weak fallback", "", `W/"old"`, true},
+			{"missing", "", "", false},
+			{"malformed", "secret", `"old"`, false},
+			{"wildcard fallback", "", "*", false},
+			{"list fallback", "", `"one", "two"`, false},
+		} {
+			t.Run(name+"/"+tc.name, func(t *testing.T) {
+				c := newTestClient(t, func(*http.Request) (*http.Response, error) {
+					r := response(304, "")
+					r.Header.Del("ETag")
+					if tc.tag != "" {
+						r.Header.Set("ETag", tc.tag)
+					}
+					return r, nil
+				})
+				args := map[string]any{"model": "provider/model"}
+				if tc.prior != "" {
+					args["if_none_match"] = tc.prior
+				}
+				result, err := c.call(context.Background(), operation(name), args)
+				if (err == nil) != tc.valid {
+					t.Fatalf("result=%v error=%v", result, err)
+				}
+				if tc.valid {
+					want := tc.tag
+					if want == "" {
+						want = tc.prior
+					}
+					if result.(map[string]any)["etag"] != want {
+						t.Fatal(result)
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestInputsRejectedOffline(t *testing.T) {
 	c := newTestClient(t, func(*http.Request) (*http.Response, error) { t.Fatal("unexpected upstream access"); return nil, nil })
 	for _, v := range []any{nil, 42, "", " \n"} {
