@@ -1,27 +1,4 @@
-## Purpose
-
-Define startup credential handling around one OAuth-client-backed or federated Tailscale credential.
-
-## Requirements
-
-### Requirement: Startup uses one OAuth or federated credential
-The system SHALL require one OAuth-client-backed or federated Tailscale credential for serving startup instead of separate Admin API and tsnet auth credentials. Informational `--version` and `--list-groups` commands SHALL not require credentials or tailnet configuration and SHALL not perform network access.
-
-#### Scenario: Single credential is configured
-- **WHEN** the server starts with the single credential environment variable set
-- **THEN** it uses that credential for Admin API clients only when Tailscale MCP is enabled and, when serving on the tailnet, tsnet authentication setup even in Aperture-only mode
-
-#### Scenario: Single credential is missing
-- **WHEN** the server starts to serve MCP without the single credential environment variable
-- **THEN** startup fails with an actionable configuration error naming the required variable
-
-#### Scenario: Legacy dual credentials are not required
-- **WHEN** the server starts with the single credential environment variable set
-- **THEN** `TAILSCALE_API_KEY` and `TS_AUTH_KEY` are not required for startup
-
-#### Scenario: Informational command runs offline
-- **WHEN** `--version` or `--list-groups` is selected without credentials or a tailnet
-- **THEN** it prints the requested information and exits successfully without Admin API validation or tsnet initialization
+## MODIFIED Requirements
 
 ### Requirement: Credential type is classified safely
 The system SHALL classify the supplied credential for diagnostics without logging secret material or relying on decoded token contents for authorization decisions. Valid explicit provider configurations SHALL classify as federated, including when JSON omits `type`. Provider configuration validation SHALL reject unsupported or ambiguous sources before provider I/O and SHALL NOT echo credentials or raw provider responses.
@@ -81,24 +58,6 @@ The system SHALL use the single credential for every typed and generic Tailscale
 - **WHEN** a request waiting for the client's in-progress refresh is canceled
 - **THEN** it returns cancellation without waiting indefinitely or sending its protected API request
 
-### Requirement: MCP authorization remains grant-based
-The system SHALL keep incoming MCP tool and resource authorization based on `jaxxstorm.com/cap/mcp` grants and SHALL NOT derive MCP user permissions from OAuth or federated credential scopes.
-
-#### Scenario: Tool access is checked
-- **WHEN** a user calls an MCP tool
-- **THEN** the existing tool grant checks determine access before the tool calls the Tailscale API
-
-#### Scenario: Resource access is checked
-- **WHEN** a user reads an MCP resource
-- **THEN** the existing resource grant checks determine access before the resource calls the Tailscale API
-
-### Requirement: OpenAPI coverage behavior is unchanged
-The system SHALL preserve existing OpenAPI MCP tool/resource mappings, grant permission names, resource URIs, and mutating-operation confirmation tokens while changing only startup credential handling.
-
-#### Scenario: Coverage is regenerated after credential change
-- **WHEN** `make coverage` runs after the credential model change
-- **THEN** coverage remains fully implemented with the same operation IDs, MCP names or URIs, grant permissions, and confirmation metadata
-
 ### Requirement: Startup credential configures isolated tsnet state
 The system SHALL continue using the single startup credential for tsnet authentication while configuring server-specific state during tailnet startup. Stdio SHALL NOT initialize tsnet or require its advertised tags. Failures obtaining the configured startup assertion SHALL propagate as startup errors without logging secret material. Federated HTTP startup SHALL acquire its assertion before `tsnet.Start()` under the startup context and a maximum 30-second acquisition budget, and SHALL configure only `ClientID` and the acquired `IDToken`, not tsnet's competing `Audience` acquisition selector. Nonempty ambient `TS_AUDIENCE`, `TS_AUTHKEY`, `TS_AUTH_KEY`, or `TS_CLIENT_SECRET` SHALL be rejected for federated HTTP startup before acquisition or enrollment because they can conflict with or bypass the selected credential. The system SHALL NOT alter those environment variables globally to conceal conflicts.
 
@@ -129,21 +88,6 @@ The system SHALL continue using the single startup credential for tsnet authenti
 #### Scenario: Ambient tsnet credential would override federation
 - **WHEN** a conflicting tsnet credential environment variable is nonempty during federated HTTP startup
 - **THEN** startup rejects the conflict with the variable name but without its value and does not silently use another identity
-
-### Requirement: Startup registers build metadata without changing credential behavior
-The system SHALL register build metadata during startup without changing Admin API credential validation or MCP authorization behavior.
-
-#### Scenario: Credential validation succeeds
-- **WHEN** startup validation succeeds for the configured credential
-- **THEN** the server registers build metadata and proceeds to serve MCP using the configured transport
-
-#### Scenario: Credential validation fails
-- **WHEN** startup validation fails because the credential lacks scope or tailnet access
-- **THEN** startup fails with an actionable error and does not serve MCP
-
-#### Scenario: MCP authorization remains grant-based
-- **WHEN** a user calls an MCP tool or reads an MCP resource after startup
-- **THEN** the existing `jaxxstorm.com/cap/mcp` grant checks determine access before the operation calls the Tailscale API
 
 ### Requirement: Federated assertions can be refreshed through a file
 The system SHALL continue accepting federated credential JSON containing `clientId` and exactly one of inline `idToken`, legacy `idTokenFile`, or supported explicit `provider`. Provider-specific configuration SHALL follow the workload-identity-provider requirements. For legacy file-backed credentials, the Admin API federation callback SHALL reread and trim the file on each assertion acquisition. Missing, unreadable, or empty files SHALL return errors without falling back to a previous assertion. Both typed and generic Admin API clients SHALL use this behavior, and token contents SHALL NOT be logged.

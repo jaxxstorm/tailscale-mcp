@@ -10,6 +10,7 @@ An MCP (Model Context Protocol) server with independently enabled Tailscale and 
 * **Alpha Organization APIs**: List organization tailnets, create API-only tailnets, and delete only the explicitly configured tailnet with guarded tools
 * **OAuth Grants Authorization**: Fine-grained MCP access control with `jaxxstorm.com/cap/mcp`
 * **Single Credential Startup**: Uses `TAILSCALE_OAUTH_TOKEN` for tsnet startup and, when Tailscale MCP is enabled, Admin API access
+* **Workload Identity**: Explicit Kubernetes projected-token, AWS STS, and GCP attached-service-account providers, with legacy inline/file federation and OAuth credentials preserved
 * **Configurable tsnet State**: Stores tsnet state on the filesystem by default, with optional Kubernetes Secret or AWS SSM state stores
 * **Legacy stdio Compatibility**: Deprecated Tailscale-only stdio mode remains available for older local clients; Aperture requires HTTP
 
@@ -59,6 +60,7 @@ Organization lifecycle tools are Alpha: `tailscale_list_organization_tailnets`, 
 ## Documentation
 
 * [Usage Guide](docs/usage.md): installation, configuration, credentials, grants, client setup, tools, resources, coverage, and troubleshooting
+* [Workload Identity Guide](docs/workload-identity.md): provider JSON, Kubernetes projection manifest, AWS role policy, GCP metadata prerequisites, refresh boundaries, environment conflicts, and rollback
 * [Aperture Guide](docs/aperture.md): tools, upstream identity, grants, safe replacement, pricing, and offline schema maintenance
 * [Coverage Report](coverage/mcp-coverage.md): generated Tailscale OpenAPI to MCP coverage mapping
 * [Parity Backlog](coverage/parity-backlog.md): generated list of unmapped API operations

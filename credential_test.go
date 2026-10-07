@@ -107,7 +107,7 @@ func TestConfigureTSNetUsesSingleCredential(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := &tsnet.Server{}
-			tt.cred.ConfigureTSNet(server)
+			tt.cred.ConfigureTSNet(context.Background(), server)
 			if !tt.want(server) {
 				t.Fatalf("unexpected tsnet server configuration: %#v", server)
 			}

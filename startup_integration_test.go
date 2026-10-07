@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -105,7 +106,7 @@ func TestStartupIntegrationProcess(t *testing.T) {
 		}
 		os.Exit(0)
 	}
-	var apiCalls, validations atomic.Int64
+	var apiCalls, validations, exchanges atomic.Int64
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	http.DefaultTransport = credentialRoundTripFunc(func(r *http.Request) (*http.Response, error) {
@@ -114,8 +115,14 @@ func TestStartupIntegrationProcess(t *testing.T) {
 			panic("offline startup attempted HTTP: " + r.URL.String())
 		}
 		switch {
-		case r.Method == "POST" && r.URL.Path == "/api/v2/oauth/token":
+		case r.Method == "POST" && (r.URL.Path == "/api/v2/oauth/token" || r.URL.Path == "/api/v2/oauth/token-exchange"):
 			body = `{"access_token":"test-only-access-token","token_type":"Bearer","expires_in":3600}`
+			if path := os.Getenv("STARTUP_PROJECTED_TOKEN"); path != "" && exchanges.Add(1) == 2 {
+				// Typed validation and generic tools have independent access-token caches.
+				if err := os.Remove(path); err != nil {
+					panic("unexpected provider reacquisition")
+				}
+			}
 		case r.Method == "GET" && r.URL.Path == "/api/v2/tailnet/test/settings":
 			validations.Add(1)
 			if deadline, ok := r.Context().Deadline(); !ok || time.Until(deadline) > credentialValidationTimeout {
@@ -236,9 +243,15 @@ func TestStartupIntegrationOffline(t *testing.T) {
 	for _, args := range [][]string{{"--version"}, {"--version", "--aperture"}, {"--version", "--tailscale=false"}, {"--version", "--tailscale=false", "--stdio", "--aperture"}, {"--list-groups"}, {"--list-groups", "--local-cli"}, {"--list-groups", "--stdio"}, {"--list-groups", "--aperture"}, {"--list-groups", "--local-cli", "--aperture"}, {"--list-groups", "--stdio", "--aperture"}, {"--list-groups", "--tailscale=false"}, {"--list-groups", "--tailscale=false", "--local-cli"}, {"--list-groups", "--tailscale=false", "--aperture"}, {"--list-groups", "--tailscale=false", "--local-cli", "--aperture"}, {"--list-groups", "--tailscale=false", "--stdio", "--aperture"}} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			var previous []byte
-			for range 2 {
+			for _, credential := range []string{
+				`{"clientId":"cid","provider":"kubernetes","audience":"aud","tokenFile":"/missing/projected-token"}`,
+				`{"clientId":"cid","provider":"aws","audience":"aud"}`,
+				`{"clientId":"cid","provider":"gcp","audience":"aud"}`,
+				`{"provider":"unsupported","tokenFile":false}`,
+			} {
 				// Invalid serving-only configuration must not block informational commands.
 				cmd, stderr := startupCommand(t, "offline", append(args, "--state=invalid://must-not-initialize", "--local-grants={", "--port=0", "--aperture-url=invalid://must-not-initialize")...)
+				cmd.Env = append(cmd.Env, "TAILSCALE_OAUTH_TOKEN="+credential, "AWS_CONFIG_FILE=/missing/aws-config", "AWS_SHARED_CREDENTIALS_FILE=/missing/aws-credentials", "AWS_WEB_IDENTITY_TOKEN_FILE=/missing/aws-token", "AWS_REGION=invalid", "GCE_METADATA_HOST=offline.invalid", "GOOGLE_APPLICATION_CREDENTIALS=/missing/adc", "TS_AUDIENCE=ambient-secret")
 				output, err := cmd.Output()
 				if err != nil {
 					t.Fatalf("offline main: %v\n%s", err, stderr)
@@ -279,6 +292,49 @@ func TestStartupIntegrationOffline(t *testing.T) {
 	cmd, stderr := startupCommand(t, "offline")
 	if err := cmd.Run(); err == nil || !strings.Contains(stderr.String(), "TAILSCALE_TAILNET is required") {
 		t.Fatalf("serving without configuration: %v %s", err, stderr)
+	}
+}
+
+func TestStartupIntegrationProviderHTTPBoundaries(t *testing.T) {
+	for _, service := range []string{"tailscale", "combined", "aperture"} {
+		for _, conflict := range []string{"", "TS_AUDIENCE", "TS_AUTHKEY", "TS_AUTH_KEY", "TS_CLIENT_SECRET"} {
+			t.Run(service+"/"+conflict, func(t *testing.T) {
+				args := []string{`--credential={"clientId":"cid","provider":"kubernetes","audience":"aud","tokenFile":"/missing/private-token-path"}`, "--advertise-tags=tag:test", "--state=mem:"}
+				if service != "aperture" {
+					args = append(args, "--tailnet=test")
+				}
+				if service != "tailscale" {
+					args = append(args, "--aperture")
+				}
+				if service == "aperture" {
+					args = append(args, "--tailscale=false")
+				}
+				cmd, stderr := startupCommand(t, "offline", args...)
+				if conflict != "" {
+					cmd.Env = append(cmd.Env, conflict+"=ambient-secret")
+				}
+				if err := cmd.Run(); err == nil {
+					t.Fatal("unusable provider started serving")
+				}
+				message := stderr.String()
+				for _, secret := range []string{"ambient-secret", "/missing/private-token-path", "offline startup attempted HTTP"} {
+					if strings.Contains(message, secret) {
+						t.Fatalf("unsafe startup failure: %s", message)
+					}
+				}
+				if conflict != "" {
+					if !strings.Contains(message, conflict+" conflicts") || strings.Contains(message, "acquisition failed") {
+						t.Fatalf("conflict did not precede acquisition: %s", message)
+					}
+				} else if service == "aperture" {
+					if !strings.Contains(message, "failed to configure tsnet credential") || strings.Contains(message, "Validating") || strings.Contains(message, "TAILSCALE_TAILNET is required") {
+						t.Fatalf("Aperture-only performed Admin validation or missed enrollment: %s", message)
+					}
+				} else if !strings.Contains(message, "kubernetes") || strings.Contains(message, "failed to configure tsnet credential") {
+					t.Fatalf("Admin validation did not precede enrollment: %s", message)
+				}
+			})
+		}
 	}
 }
 
@@ -385,6 +441,13 @@ func startupProtocol(t *testing.T, request startupRPC, selectors []string) int64
 		t.Fatal("duplicate or unexpected tools in discovery")
 	}
 	var calls int64
+	if catalog.Allows(selectors, "tailscale_set_dns_configuration") {
+		response = request("tools/call", map[string]any{"name": "tailscale_set_dns_configuration", "arguments": map[string]any{"body": map[string]any{}, "confirm": "incorrect"}})
+		var result mcp.CallToolResult
+		if response["error"] == nil && (json.Unmarshal(response["result"], &result) != nil || !result.IsError) {
+			t.Fatalf("mutation accepted incorrect confirmation: %s", response)
+		}
+	}
 	for _, name := range []string{"tailscale_get_dns_configuration", "tailscale_set_dns_configuration"} {
 		response = request("tools/call", map[string]any{"name": name, "arguments": map[string]any{"body": map[string]any{}, "confirm": "setDnsConfiguration"}})
 		if catalog.Allows(selectors, name) {
@@ -431,21 +494,32 @@ func TestStartupIntegrationConfiguredTransports(t *testing.T) {
 	t.Setenv("PATH", cliDir)
 	t.Setenv("STARTUP_CLI_MARKER", marker)
 	for _, selectors := range [][]string{nil, {"tailscale_get_dns_configuration"}, {"*"}, {"read:*"}, {"group:dns"}, {"group:dns:read"}} {
-		for _, transport := range []string{"stdio", "local", "peer"} {
+		for _, transport := range []string{"stdio", "provider-stdio", "local", "peer"} {
 			t.Run(transport+fmt.Sprint(selectors), func(t *testing.T) {
 				caps := &MCPCapability{Tools: selectors}
-				if transport == "stdio" {
+				if transport == "stdio" || transport == "provider-stdio" {
 					grant := map[string]any{}
 					if selectors != nil {
 						grant["tools"] = selectors
 					}
 					raw, _ := json.Marshal(grant)
 					args := []string{"--stdio", "--local-cli", "--tailnet=test", `--credential={"type":"oauth","clientId":"test","clientSecret":"test-only-secret"}`, "--state=invalid://stdio-must-ignore", "--aperture", "--aperture-url=invalid://stdio-must-ignore"}
+					var projected string
+					if transport == "provider-stdio" {
+						projected = filepath.Join(t.TempDir(), "token")
+						claims := fmt.Sprintf(`{"exp":%d,"aud":"aud","tools":["*"]}`, time.Now().Add(time.Hour).Unix())
+						writeAssertion(t, projected, base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"ES384"}`))+"."+base64.RawURLEncoding.EncodeToString([]byte(claims))+".c2ln")
+						raw, _ := json.Marshal(map[string]string{"clientId": "test", "provider": "kubernetes", "audience": "aud", "tokenFile": projected})
+						args[3] = "--credential=" + string(raw)
+					}
 					if selectors != nil {
 						args = append(args, "--local-grants="+string(raw))
 					}
 					cmd, stderr := startupCommand(t, "stdio", args...)
 					cmd.Env = append(cmd.Env, "PATH="+cliDir, "STARTUP_CLI_MARKER="+marker)
+					if projected != "" {
+						cmd.Env = append(cmd.Env, "STARTUP_PROJECTED_TOKEN="+projected, "TS_AUDIENCE=ignored", "TS_AUTHKEY=ignored", "TS_AUTH_KEY=ignored", "TS_CLIENT_SECRET=ignored")
+					}
 					input, err := cmd.StdinPipe()
 					if err != nil {
 						t.Fatal(err)

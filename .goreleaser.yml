@@ -28,6 +28,7 @@ archives:
       - docs/usage.md
       - docs/integration.md
       - docs/aperture.md
+      - docs/workload-identity.md
     format_overrides:
       - goos: windows
         format: zip

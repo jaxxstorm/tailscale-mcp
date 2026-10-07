@@ -23,6 +23,7 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/jaxxstorm/tailscale-mcp/internal/aperture"
 	"github.com/jaxxstorm/tailscale-mcp/internal/readapi"
+	"github.com/jaxxstorm/tailscale-mcp/internal/workloadidentity"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/tailscale/hujson"
@@ -88,14 +89,18 @@ const (
 )
 
 type TailscaleCredential struct {
-	Kind         CredentialKind
-	Token        string
-	ClientID     string
-	ClientSecret string
-	IDToken      string
-	IDTokenFile  string
-	Audience     string
-	Scopes       []string
+	Kind            CredentialKind
+	Token           string
+	ClientID        string
+	ClientSecret    string
+	IDToken         string
+	IDTokenFile     string
+	Audience        string
+	Scopes          []string
+	Provider        string
+	TokenFile       string
+	Region          string
+	acquireProvider func(context.Context, workloadidentity.Config) (string, error)
 }
 
 type credentialJSON struct {
@@ -107,6 +112,9 @@ type credentialJSON struct {
 	IDTokenFile  string   `json:"idTokenFile"`
 	Audience     string   `json:"audience"`
 	Scopes       []string `json:"scopes"`
+	Provider     string   `json:"provider"`
+	TokenFile    string   `json:"tokenFile"`
+	Region       string   `json:"region"`
 }
 
 func ParseTailscaleCredential(raw string) (TailscaleCredential, error) {
@@ -125,6 +133,25 @@ func ParseTailscaleCredentialWithClientID(raw, clientID string) (TailscaleCreden
 		if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
 			return TailscaleCredential{}, fmt.Errorf("failed to parse %s JSON", tailscaleOAuthTokenEnv)
 		}
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(raw), &fields); err != nil {
+			return TailscaleCredential{}, fmt.Errorf("failed to parse %s JSON", tailscaleOAuthTokenEnv)
+		}
+		for _, name := range []string{"provider", "tokenFile", "region"} {
+			if value, present := fields[name]; present {
+				var s string
+				if json.Unmarshal(value, &s) != nil || strings.TrimSpace(s) == "" {
+					return TailscaleCredential{}, fmt.Errorf("federated %s must be a nonblank string", name)
+				}
+			}
+		}
+		if cfg.Provider != "" {
+			for _, name := range []string{"idToken", "idTokenFile"} {
+				if _, present := fields[name]; present {
+					return TailscaleCredential{}, errors.New("provider must not be combined with idToken or idTokenFile")
+				}
+			}
+		}
 		cred := TailscaleCredential{
 			Kind:         CredentialKind(strings.ToLower(cfg.Type)),
 			Token:        strings.TrimSpace(cfg.Token),
@@ -134,6 +161,9 @@ func ParseTailscaleCredentialWithClientID(raw, clientID string) (TailscaleCreden
 			IDTokenFile:  strings.TrimSpace(cfg.IDTokenFile),
 			Audience:     strings.TrimSpace(cfg.Audience),
 			Scopes:       cfg.Scopes,
+			Provider:     strings.TrimSpace(cfg.Provider),
+			TokenFile:    strings.TrimSpace(cfg.TokenFile),
+			Region:       strings.TrimSpace(cfg.Region),
 		}
 		if cred.Kind == "" {
 			cred.Kind = classifyCredential(cred)
@@ -157,7 +187,7 @@ func classifyCredential(cred TailscaleCredential) CredentialKind {
 	switch {
 	case cred.ClientID != "" && cred.ClientSecret != "":
 		return CredentialOAuth
-	case cred.ClientID != "" && (cred.IDToken != "" || cred.IDTokenFile != "" || cred.Audience != ""):
+	case cred.ClientID != "" && (cred.IDToken != "" || cred.IDTokenFile != "" || cred.Audience != "" || cred.Provider != ""):
 		return CredentialFederated
 	case cred.Token != "":
 		return CredentialBearer
@@ -167,6 +197,17 @@ func classifyCredential(cred TailscaleCredential) CredentialKind {
 }
 
 func (c TailscaleCredential) validate() error {
+	if c.Provider != "" || c.TokenFile != "" || c.Region != "" {
+		if c.Kind != CredentialFederated {
+			return errors.New("provider settings require a federated credential")
+		}
+		if c.Token != "" || c.ClientSecret != "" {
+			return errors.New("provider settings must not be combined with bearer or OAuth secrets")
+		}
+		if err := (workloadidentity.Config{Provider: c.Provider, Audience: c.Audience, TokenFile: c.TokenFile, Region: c.Region}).Validate(); err != nil {
+			return err
+		}
+	}
 	switch c.Kind {
 	case CredentialOAuth:
 		if c.ClientID == "" || c.ClientSecret == "" {
@@ -176,8 +217,14 @@ func (c TailscaleCredential) validate() error {
 		if c.ClientID == "" {
 			return errors.New("federated credential requires clientId")
 		}
-		if (c.IDToken == "") == (c.IDTokenFile == "") {
-			return errors.New("federated credential requires exactly one of idToken or idTokenFile for Admin API access")
+		sources := 0
+		for _, source := range []string{c.IDToken, c.IDTokenFile, c.Provider} {
+			if source != "" {
+				sources++
+			}
+		}
+		if sources != 1 {
+			return errors.New("federated credential requires exactly one of idToken, idTokenFile, or provider")
 		}
 	case CredentialBearer:
 		if c.Token == "" {
@@ -213,14 +260,29 @@ func (c TailscaleCredential) AdminHTTPClient(base *http.Client, baseURL string) 
 	return auth.HTTPClient(base, baseURL)
 }
 
-func (c TailscaleCredential) assertion() (string, error) {
+func (c TailscaleCredential) assertion(ctx context.Context) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, credentialValidationTimeout)
+	defer cancel()
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if err := c.validate(); err != nil {
 		return "", err
+	}
+	if c.Provider != "" {
+		acquire := c.acquireProvider
+		if acquire == nil {
+			acquire = workloadidentity.Acquire
+		}
+		return acquire(ctx, workloadidentity.Config{Provider: c.Provider, Audience: c.Audience, TokenFile: c.TokenFile, Region: c.Region})
 	}
 	if c.IDTokenFile == "" {
 		return c.IDToken, nil
 	}
 	data, err := os.ReadFile(c.IDTokenFile)
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
 	if err != nil {
 		return "", errors.New("cannot read federated idTokenFile; verify the file exists and is readable")
 	}
@@ -268,9 +330,14 @@ func (a credentialAuth) HTTPClient(base *http.Client, baseURL string) *http.Clie
 				return transport.RoundTrip(r.Clone(req.Context()))
 			})
 			var source oauth2.TokenSource
+			var assertionErr error
 			c := a.credential
 			if c.Kind == CredentialFederated {
-				auth := &tsapi.IdentityFederation{ClientID: c.ClientID, IDTokenFunc: c.assertion}
+				auth := &tsapi.IdentityFederation{ClientID: c.ClientID, IDTokenFunc: func() (string, error) {
+					var assertion string
+					assertion, assertionErr = c.assertion(req.Context())
+					return assertion, assertionErr
+				}}
 				source = auth.HTTPClient(&exchangeClient, baseURL).Transport.(*oauth2.Transport).Source
 			} else {
 				cfg := clientcredentials.Config{ClientID: c.ClientID, ClientSecret: c.ClientSecret, Scopes: c.Scopes, TokenURL: baseURL + "/api/v2/oauth/token"}
@@ -280,6 +347,15 @@ func (a credentialAuth) HTTPClient(base *http.Client, baseURL string) *http.Clie
 			if err != nil {
 				if req.Context().Err() != nil {
 					return "", req.Context().Err()
+				}
+				if errors.Is(assertionErr, context.Canceled) {
+					return "", context.Canceled
+				}
+				if errors.Is(assertionErr, context.DeadlineExceeded) {
+					return "", context.DeadlineExceeded
+				}
+				if assertionErr != nil && c.Provider != "" {
+					return "", fmt.Errorf("%s provider assertion acquisition failed; verify workload identity configuration", c.Provider)
 				}
 				return "", errors.New("credential token acquisition failed; verify the credential or assertion file and required access")
 			}
@@ -296,18 +372,32 @@ func (a credentialAuth) HTTPClient(base *http.Client, baseURL string) *http.Clie
 	return &client
 }
 
-func (c TailscaleCredential) ConfigureTSNet(s *tsnet.Server) error {
+func (c TailscaleCredential) validateTSNetEnvironment() error {
+	if c.Kind == CredentialFederated {
+		for _, name := range []string{"TS_AUDIENCE", "TS_AUTHKEY", "TS_AUTH_KEY", "TS_CLIENT_SECRET"} {
+			if os.Getenv(name) != "" {
+				return fmt.Errorf("%s conflicts with the configured federated credential; unset it for HTTP serving", name)
+			}
+		}
+	}
+	return nil
+}
+
+func (c TailscaleCredential) ConfigureTSNet(ctx context.Context, s *tsnet.Server) error {
+	if err := c.validateTSNetEnvironment(); err != nil {
+		return err
+	}
 	switch c.Kind {
 	case CredentialOAuth:
 		s.ClientSecret = c.ClientSecret
 	case CredentialFederated:
-		token, err := c.assertion()
+		token, err := c.assertion(ctx)
 		if err != nil {
 			return err
 		}
 		s.ClientID = c.ClientID
 		s.IDToken = token
-		s.Audience = c.Audience
+		s.Audience = ""
 	case CredentialBearer:
 		s.AuthKey = c.Token
 	}
@@ -493,7 +583,7 @@ func tsnetZapLogf(log *zap.Logger, level zapcore.Level) func(format string, args
 	}
 }
 
-func newTSNetServer(hostname string, advertiseTags []string, credential TailscaleCredential, debug bool, state tsnetStateConfig) (*tsnet.Server, error) {
+func newTSNetServer(ctx context.Context, hostname string, advertiseTags []string, credential TailscaleCredential, debug bool, state tsnetStateConfig) (*tsnet.Server, error) {
 	tsServer := &tsnet.Server{
 		Dir:           state.Dir,
 		Hostname:      hostname,
@@ -503,15 +593,15 @@ func newTSNetServer(hostname string, advertiseTags []string, credential Tailscal
 	if debug {
 		tsServer.Logf = tsnetZapLogf(logger, zapcore.DebugLevel)
 	}
+	if err := credential.ConfigureTSNet(ctx, tsServer); err != nil {
+		return nil, fmt.Errorf("failed to configure tsnet credential: %w", err)
+	}
 	if state.StorePath != "" {
 		store, err := ipnstore.New(tsnetZapLogf(logger, zapcore.InfoLevel), state.StorePath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to configure tsnet state store %q: %w", state.StorePath, err)
 		}
 		tsServer.Store = store
-	}
-	if err := credential.ConfigureTSNet(tsServer); err != nil {
-		return nil, fmt.Errorf("failed to configure tsnet credential: %w", err)
 	}
 	return tsServer, nil
 }
@@ -789,6 +879,11 @@ func run(ctx context.Context, cli CLI) (retErr error) {
 	if err != nil {
 		return err
 	}
+	if !cli.Stdio {
+		if err := credential.validateTSNetEnvironment(); err != nil {
+			return err
+		}
+	}
 	advertiseTags, err := parseAdvertiseTags(cli.AdvertiseTags)
 	if err != nil {
 		return err
@@ -849,7 +944,7 @@ func run(ctx context.Context, cli CLI) (retErr error) {
 	}
 
 	registerTSNetBuildInfo()
-	tsServer, err := newTSNetServer(cli.Hostname, advertiseTags, credential, cli.Debug, stateConfig)
+	tsServer, err := newTSNetServer(ctx, cli.Hostname, advertiseTags, credential, cli.Debug, stateConfig)
 	if err != nil {
 		return err
 	}
@@ -863,7 +958,13 @@ func serveMCPHTTP(ctx context.Context, tsServer tailnetServer, mcpServer *server
 	// Start has no context API. Never race it with Close: failed initialization
 	// uses the SDK's close-on-error pool; only a successful Start permits Close.
 	if err := tsServer.Start(); err != nil {
-		return fmt.Errorf("initialize tailnet: %w", err)
+		// SDK enrollment errors can include token-exchange response bodies.
+		for _, sentinel := range []error{context.Canceled, context.DeadlineExceeded} {
+			if errors.Is(err, sentinel) {
+				return fmt.Errorf("initialize tailnet: %w", sentinel)
+			}
+		}
+		return errors.New("initialize tailnet failed; verify enrollment credentials, advertised tags, and state configuration")
 	}
 	defer func() { retErr = errors.Join(retErr, tsServer.Close()) }()
 	if err := ctx.Err(); err != nil {

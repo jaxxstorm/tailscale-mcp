@@ -51,11 +51,11 @@ func TestFederatedAssertionSources(t *testing.T) {
 		t.Fatalf("file credential parse: %v", err)
 	}
 	writeAssertion(t, path, " \nfirst\t")
-	if got, err := cred.assertion(); err != nil || got != "first" {
+	if got, err := cred.assertion(context.Background()); err != nil || got != "first" {
 		t.Fatalf("trimmed assertion failed: %v", err)
 	}
 	writeAssertion(t, path, "second")
-	s, err := newTSNetServer("credential-test", nil, cred, false, tsnetStateConfig{})
+	s, err := newTSNetServer(context.Background(), "credential-test", nil, cred, false, tsnetStateConfig{})
 	if err != nil || s.IDToken != "second" {
 		t.Fatalf("snapshot failed: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestFederatedAssertionSources(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			server, err := newTSNetServer("credential-test", nil, cred, false, tsnetStateConfig{})
+			server, err := newTSNetServer(context.Background(), "credential-test", nil, cred, false, tsnetStateConfig{})
 			if err == nil || server != nil || strings.Contains(err.Error(), path) || strings.Contains(err.Error(), "second") {
 				t.Fatalf("expected sanitized startup failure, got %v", err)
 			}

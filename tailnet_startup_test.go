@@ -128,7 +128,7 @@ func TestTailnetInitializationNeverRacesClose(t *testing.T) {
 	// This SDK failure occurs before s.sys exists. Calling Close after it would
 	// panic; Start's own close-on-error pool is the appropriate cleanup path.
 	err := serveMCPHTTP(context.Background(), &tsnet.Server{Store: new(mem.Store)}, nil, CLI{Tailscale: true, ApertureURL: "http://ai/aperture"}, 8080, 8080, nil)
-	if err == nil || !strings.Contains(err.Error(), "in-memory store") {
+	if err == nil || !strings.Contains(err.Error(), "state configuration") {
 		t.Fatalf("SDK initialization error = %v", err)
 	}
 }

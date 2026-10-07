@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -166,7 +167,7 @@ func TestNewTSNetServerPreservesStartupConfiguration(t *testing.T) {
 		t.Fatalf("resolveTSNetState() error = %v", err)
 	}
 
-	tsServer, err := newTSNetServer("ops-mcp", tags, credential, false, state)
+	tsServer, err := newTSNetServer(context.Background(), "ops-mcp", tags, credential, false, state)
 	if err != nil {
 		t.Fatalf("newTSNetServer() error = %v", err)
 	}
@@ -197,7 +198,7 @@ func TestNewTSNetServerConfiguresDebugLogf(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveTSNetState() error = %v", err)
 	}
-	tsServer, err := newTSNetServer("ops-mcp", nil, TailscaleCredential{}, true, state)
+	tsServer, err := newTSNetServer(context.Background(), "ops-mcp", nil, TailscaleCredential{}, true, state)
 	if err != nil {
 		t.Fatalf("newTSNetServer() error = %v", err)
 	}
