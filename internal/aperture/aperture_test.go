@@ -115,6 +115,60 @@ func TestConfigRequests(t *testing.T) {
 	}
 }
 
+func TestConfigOpaqueVersionRoundTrip(t *testing.T) {
+	const current = "5cfcc24359379674"
+	const next = "1a2b3c4d5e6f7890"
+	var calls int
+	c := newTestClient(t, func(r *http.Request) (*http.Response, error) {
+		calls++
+		res := response(200, `{"config":"{ /* redacted */ }"}`)
+		if calls == 1 {
+			if r.Method != http.MethodGet {
+				t.Fatal("expected config read")
+			}
+			res.Header.Set("ETag", current)
+		} else {
+			if calls != 2 || r.Method != http.MethodPut || r.Header.Get("If-Match") != current {
+				t.Fatal("config validator was changed or write retried")
+			}
+			res.Header.Set("ETag", next)
+		}
+		return res, nil
+	})
+	read, err := c.call(context.Background(), operation("get_config"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	etag := read.(map[string]any)["etag"]
+	if etag != current {
+		t.Fatal("read did not preserve opaque config ETag")
+	}
+	written, err := c.call(context.Background(), operation("set_config"), map[string]any{"config": "{}", "confirm": "aperture_set_config", "if_match": etag})
+	if err != nil || written.(map[string]any)["etag"] != next || calls != 2 {
+		t.Fatalf("replacement result=%v error=%v calls=%d", written, err, calls)
+	}
+}
+
+func TestConfigResponseDiagnostics(t *testing.T) {
+	for _, tc := range []struct{ tag, body, want string }{
+		{"", `{"config":"secret"}`, "missing or invalid ETag"},
+		{`W/"secret"`, `{"config":"secret"}`, "missing or invalid ETag"},
+		{"5cfcc24359379674", `{"config":{"secret":"value"}}`, "expected a nonblank config string"},
+	} {
+		for _, name := range []string{"get_config", "set_config"} {
+			c := newTestClient(t, func(*http.Request) (*http.Response, error) {
+				r := response(200, tc.body)
+				r.Header.Set("ETag", tc.tag)
+				return r, nil
+			})
+			_, err := c.call(context.Background(), operation(name), map[string]any{"config": "{}", "confirm": "aperture_set_config", "if_match": "5cfcc24359379674"})
+			if err == nil || !strings.Contains(err.Error(), tc.want) || strings.Contains(err.Error(), "secret") || strings.Contains(err.Error(), "uncertain") != (name == "set_config") {
+				t.Fatalf("unexpected diagnostic for %s: %v", name, err)
+			}
+		}
+	}
+}
+
 func TestResponseETags(t *testing.T) {
 	for _, name := range []string{"get_config", "set_config", "get_pricing", "get_model_pricing"} {
 		for _, tc := range []struct {
@@ -125,6 +179,9 @@ func TestResponseETags(t *testing.T) {
 			{name: "missing"},
 			{name: "empty", tags: []string{""}},
 			{name: "unquoted", tags: []string{"secret"}},
+			{name: "short hash", tags: []string{"5cfcc2435937967"}},
+			{name: "long hash", tags: []string{"5cfcc243593796740"}},
+			{name: "nonhex hash", tags: []string{"5cfcc2435937967z"}},
 			{name: "wildcard", tags: []string{"*"}},
 			{name: "list", tags: []string{`"one", "two"`}},
 			{name: "duplicate", tags: []string{`"one"`, `"two"`}},
@@ -231,7 +288,7 @@ func TestInputsRejectedOffline(t *testing.T) {
 			}
 		}
 	}
-	for _, tag := range []any{nil, 1, "", "*", "abc", `W/"weak"`, `"one", "two"`, "\"bad\n\""} {
+	for _, tag := range []any{nil, 1, "", "*", "abc", "5cfcc2435937967", "5cfcc243593796740", "5cfcc2435937967z", `W/"weak"`, `"one", "two"`, "\"bad\n\""} {
 		_, err := c.call(context.Background(), operation("set_config"), map[string]any{"config": "{}", "confirm": "aperture_set_config", "if_match": tag})
 		if err == nil {
 			t.Fatalf("accepted ETag %v", tag)

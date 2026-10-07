@@ -106,7 +106,7 @@ Plain `--list-groups` lists only Tailscale by default; disabled Tailscale is omi
 
 ## Safe Configuration Replacement
 
-`aperture_get_config` returns a structured result containing a backend-redacted HuJSON `config` string and the exact upstream `etag`. Preserve the validator exactly, including its quotes. `aperture_validate_config` accepts a HuJSON string and returns `valid` and sanitized `errors` without saving configuration.
+`aperture_get_config` returns a structured result containing a backend-redacted HuJSON `config` string and the exact upstream `etag`. Config validators may be Aperture's unquoted 16-character hexadecimal version or a quoted strong HTTP ETag. Preserve the value exactly: do not add or remove quotes before passing it as `if_match`. Missing validators, weak ETags, wildcards, and ETag lists are rejected. `aperture_validate_config` accepts a HuJSON string and returns `valid` and sanitized `errors` without saving configuration.
 
 **Replacement is destructive, not a merge or patch.** Redacted read-back configuration is not guaranteed to be safe to write back unchanged. Prepare a valid full replacement with appropriate provider-key handling; do not assume redaction placeholders preserve keys or that the MCP server reconstructs them. Confirm any placeholder behavior with the upstream deployment rather than relying on undocumented semantics.
 

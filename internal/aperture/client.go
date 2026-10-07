@@ -4,6 +4,7 @@ package aperture
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -92,8 +93,8 @@ func (c Client) call(ctx context.Context, op Operation, args map[string]any) (an
 			return nil, failure("input", "confirm must equal aperture_set_config")
 		}
 		validator = args["if_match"].(string)
-		if !concreteETag(validator) {
-			return nil, failure("input", "if_match must be a single concrete strong ETag from aperture_get_config")
+		if !configETag(validator) {
+			return nil, failure("input", "if_match must be a single concrete config ETag from aperture_get_config")
 		}
 	}
 	pricing := op.Group == "aperture-pricing"
@@ -191,12 +192,12 @@ func (c Client) call(ctx context.Context, op Operation, args map[string]any) (an
 		return nil, &toolError{Status: resp.StatusCode, Kind: "http", Message: fmt.Sprintf("HTTP %d: %s", resp.StatusCode, message)}
 	}
 	if op.ToolName != "aperture_validate_config" {
-		responseValidator := etag
+		valid := configETag(etag)
 		if pricing {
-			responseValidator = strings.TrimPrefix(responseValidator, "W/")
+			valid = concreteETag(strings.TrimPrefix(etag, "W/"))
 		}
-		if len(resp.Header.Values("ETag")) != 1 || !concreteETag(responseValidator) {
-			return bad()
+		if len(resp.Header.Values("ETag")) != 1 || !valid {
+			return nil, uncertain("Malformed or unexpected Aperture response: missing or invalid ETag")
 		}
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
@@ -265,9 +266,22 @@ func (c Client) call(ctx context.Context, op Operation, args map[string]any) (an
 		Config *string `json:"config"`
 	}
 	if json.Unmarshal(data, &result) != nil || result.Config == nil || strings.TrimSpace(*result.Config) == "" {
-		return bad()
+		return nil, uncertain("Malformed or unexpected Aperture response: expected a nonblank config string")
 	}
 	return map[string]any{"config": *result.Config, "etag": etag}, nil
+}
+
+func configETag(s string) bool {
+	if concreteETag(s) {
+		return true
+	}
+	// Aperture config endpoints emit an unquoted 64-bit hex version. Preserve
+	// it verbatim for If-Match instead of inventing a differently quoted version.
+	if len(s) != 16 {
+		return false
+	}
+	_, err := hex.DecodeString(s)
+	return err == nil
 }
 
 func concreteETag(s string) bool {
