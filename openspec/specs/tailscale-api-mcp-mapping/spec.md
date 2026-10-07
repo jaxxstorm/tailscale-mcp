@@ -4,6 +4,8 @@ Define how Tailscale OpenAPI operations are classified into MCP tools, resources
 
 ## Requirements
 
+Runtime availability of the Tailscale tools, resources, and prompts specified below requires Tailscale MCP to be enabled. Disabling it SHALL NOT change the canonical OpenAPI mapping inventory or generated coverage status; it SHALL omit that service's runtime registrations instead.
+
 ### Requirement: OpenAPI operations have explicit MCP mapping decisions
 The system SHALL maintain a coverage record for each Tailscale OpenAPI operation that identifies whether the operation is exposed as an MCP tool, MCP resource, MCP prompt workflow, or explicit exclusion, and SHALL mark implemented endpoints as implemented when their MCP registration and grant enforcement exist.
 

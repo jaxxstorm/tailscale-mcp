@@ -4,6 +4,8 @@ Define curated, task-oriented MCP tools for common Tailscale operator workflows.
 
 ## Requirements
 
+The runtime tool surface specified below applies only when Tailscale MCP is enabled. With `--tailscale=false`, curated tools, including optional local CLI diagnostics, SHALL NOT be registered or included in catalogs, regardless of grants or local CLI opt-in.
+
 ### Requirement: Curated tools provide task-oriented operator workflows
 The system SHALL expose curated MCP tools for common Tailscale operator tasks in addition to the generated OpenAPI endpoint tools.
 

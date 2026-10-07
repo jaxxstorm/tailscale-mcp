@@ -9,7 +9,7 @@ The system SHALL require one OAuth-client-backed or federated Tailscale credenti
 
 #### Scenario: Single credential is configured
 - **WHEN** the server starts with the single credential environment variable set
-- **THEN** it uses that credential for Admin API clients and, when serving on the tailnet, tsnet authentication setup
+- **THEN** it uses that credential for Admin API clients only when Tailscale MCP is enabled and, when serving on the tailnet, tsnet authentication setup even in Aperture-only mode
 
 #### Scenario: Single credential is missing
 - **WHEN** the server starts to serve MCP without the single credential environment variable
@@ -31,11 +31,20 @@ The system SHALL classify the supplied credential for diagnostics without loggin
 - **THEN** logs include the classification and do not include the raw credential value
 
 #### Scenario: Unknown credential type is supplied
-- **WHEN** the supplied credential type cannot be classified locally
+- **WHEN** Tailscale MCP is enabled and the supplied credential type cannot be classified locally
 - **THEN** startup continues to validation and reports Tailscale validation errors if the credential is unusable
 
 ### Requirement: Startup validates Admin API access
-The system SHALL validate the supplied credential against the existing low-risk Tailscale Admin API read before accepting requests, using a context deadline of 30 seconds.
+Only when Tailscale MCP is enabled SHALL the system require `TAILSCALE_TAILNET`, construct Admin API clients, and validate the supplied credential against the existing low-risk Tailscale Admin API read before accepting requests, using a context deadline of 30 seconds. This validation SHALL apply to both HTTP and stdio with Tailscale enabled. Aperture-only HTTP SHALL NOT initialize Admin API clients, perform or log Admin API validation, or require Admin API read scopes or `TAILSCALE_TAILNET`. It SHALL still require the existing `TAILSCALE_OAUTH_TOKEN` credential for shared tsnet enrollment and advertised tags where applicable; disabling the Tailscale MCP service SHALL NOT disable tsnet transport or identity.
+
+#### Scenario: Aperture-only startup needs enrollment but not Admin API access
+- **WHEN** HTTP serving starts with `--tailscale=false --aperture`, a valid tsnet enrollment credential and required tags, but no `TAILSCALE_TAILNET` or Admin API read scopes
+- **THEN** startup can proceed without constructing Admin API clients or performing or logging the tailnet-settings validation read
+- **AND** tsnet still uses the configured enrollment credential and tags
+
+#### Scenario: Aperture-only startup lacks enrollment credentials
+- **WHEN** HTTP serving starts with `--tailscale=false --aperture` without `TAILSCALE_OAUTH_TOKEN`
+- **THEN** startup fails with an actionable enrollment credential configuration error rather than serving credential-free
 
 #### Scenario: Credential has required validation scope
 - **WHEN** startup validation succeeds

@@ -4,6 +4,8 @@ Define how remaining Tailscale OpenAPI endpoints are exposed through generic MCP
 
 ## Requirements
 
+The runtime Tailscale tool and resource requirements below apply only when Tailscale MCP is enabled. With `--tailscale=false`, the system SHALL NOT initialize these tools, resources, or their Admin API clients; grants SHALL NOT enable them.
+
 ### Requirement: OpenAPI gaps are exposed as MCP tools
 The system SHALL expose each Tailscale OpenAPI gap as an MCP tool with typed inputs, structured JSON output, grant enforcement, and confirmation for mutating operations.
 

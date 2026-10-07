@@ -37,7 +37,7 @@ type apertureTransportFixture struct {
 // These tests exercise sessions, which newer MCP protocol versions retire.
 const sessionProtocolVersion = "2025-03-26"
 
-func newApertureTransportFixture(t *testing.T, localCaps *MCPCapability) *apertureTransportFixture {
+func newApertureTransportFixture(t *testing.T, localCaps *MCPCapability, tailscaleEnabled, apertureEnabled bool) *apertureTransportFixture {
 	t.Helper()
 	oldLogger := logger
 	logger = zap.NewNop()
@@ -61,21 +61,27 @@ func newApertureTransportFixture(t *testing.T, localCaps *MCPCapability) *apertu
 		}
 	}))
 	t.Cleanup(api.Close)
-	base, _ := url.Parse(api.URL)
-	ts, _, err := newConfiguredMCPServer(&tsapi.Client{BaseURL: base, HTTP: api.Client(), Tailnet: "test"}, readapi.Client{BaseURL: api.URL, HTTPClient: api.Client(), Tailnet: "test"}, false)
-	if err != nil {
-		t.Fatal(err)
+	var tsHTTP http.Handler
+	if tailscaleEnabled {
+		base, _ := url.Parse(api.URL)
+		ts, _, err := newConfiguredMCPServer(&tsapi.Client{BaseURL: base, HTTP: api.Client(), Tailnet: "test"}, readapi.Client{BaseURL: api.URL, HTTPClient: api.Client(), Tailnet: "test"}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tsHTTP = server.NewStreamableHTTPServer(ts, server.WithEndpointPath(mcpEndpointPath))
 	}
-	client, err := aperture.NewClient(api.URL+"/aperture", api.Client().Transport)
-	if err != nil {
-		t.Fatal(err)
+	var apHTTP http.Handler
+	if apertureEnabled {
+		client, err := aperture.NewClient(api.URL+"/aperture", api.Client().Transport)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ap, _, err := newApertureMCPServer(client)
+		if err != nil {
+			t.Fatal(err)
+		}
+		apHTTP = server.NewStreamableHTTPServer(ap, server.WithEndpointPath(apertureEndpointPath))
 	}
-	ap, _, err := newApertureMCPServer(client)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tsHTTP := server.NewStreamableHTTPServer(ts, server.WithEndpointPath(mcpEndpointPath))
-	apHTTP := server.NewStreamableHTTPServer(ap, server.WithEndpointPath(apertureEndpointPath))
 	peerHandler := mcpHTTPHandler(tsHTTP, apHTTP, func(next http.Handler) http.Handler {
 		peer := peerGrantMiddleware(next, func(_ context.Context, addr string) (*apitype.WhoIsResponse, error) {
 			f.whoIsCalls.Add(1)
@@ -99,6 +105,7 @@ func newApertureTransportFixture(t *testing.T, localCaps *MCPCapability) *apertu
 	})
 	f.peer = httptest.NewUnstartedServer(peerHandler)
 	port := f.peer.Listener.Addr().(*net.TCPAddr).Port
+	var err error
 	f.peer.Config.Handler, err = tailnetHostMiddleware(peerHandler, &ipnstate.Status{TailscaleIPs: []netip.Addr{netip.MustParseAddr("127.0.0.1")}}, port, false)
 	if err != nil {
 		t.Fatal(err)
@@ -170,8 +177,97 @@ func apertureTransportResult(t *testing.T, s *httptest.Server, path, session, me
 	}
 }
 
+func TestApertureTransportDisabled(t *testing.T) {
+	f := newApertureTransportFixture(t, &MCPCapability{Tools: []string{"*"}}, true, false)
+	for _, listener := range []struct {
+		name string
+		s    *httptest.Server
+	}{{"tailnet", f.peer}, {"loopback", f.local}} {
+		t.Run(listener.name, func(t *testing.T) {
+			before := f.apiCalls.Load()
+			status, _, _ := apertureTransportRPC(t, listener.s, apertureEndpointPath, "", "initialize", map[string]any{})
+			if status != http.StatusNotFound || f.apiCalls.Load() != before {
+				t.Fatalf("disabled Aperture: status=%d backend calls=%d", status, f.apiCalls.Load()-before)
+			}
+			session := apertureTransportInitialize(t, listener.s, mcpEndpointPath)
+			for _, path := range []string{mcpEndpointPath, legacyMCPEndpointPath} {
+				var tools mcp.ListToolsResult
+				apertureTransportResult(t, listener.s, path, session, "tools/list", map[string]any{}, &tools)
+				if len(tools.Tools) == 0 {
+					t.Fatal("disabled Aperture removed Tailscale tools")
+				}
+				for _, tool := range tools.Tools {
+					if strings.HasPrefix(tool.Name, "aperture_") {
+						t.Fatalf("disabled tool advertised: %s", tool.Name)
+					}
+				}
+				var result mcp.CallToolResult
+				apertureTransportResult(t, listener.s, path, session, "tools/call", map[string]any{"name": "tailscale_get_dns_configuration"}, &result)
+				if result.IsError {
+					t.Fatalf("Tailscale call failed on %s", path)
+				}
+			}
+			if f.apiCalls.Load() != before+2 {
+				t.Fatalf("backend calls=%d, want 2", f.apiCalls.Load()-before)
+			}
+		})
+	}
+}
+
+func TestApertureTransportTailscaleDisabled(t *testing.T) {
+	for _, apertureEnabled := range []bool{false, true} {
+		t.Run(fmt.Sprint("aperture=", apertureEnabled), func(t *testing.T) {
+			f := newApertureTransportFixture(t, &MCPCapability{Tools: []string{"*"}}, false, apertureEnabled)
+			for _, listener := range []struct {
+				name string
+				s    *httptest.Server
+			}{{"tailnet", f.peer}, {"loopback", f.local}} {
+				t.Run(listener.name, func(t *testing.T) {
+					before, whoBefore := f.apiCalls.Load(), f.whoIsCalls.Load()
+					for _, path := range []string{mcpEndpointPath, legacyMCPEndpointPath} {
+						status, _, _ := apertureTransportRPC(t, listener.s, path, "", "initialize", map[string]any{})
+						if status != http.StatusNotFound {
+							t.Fatalf("disabled Tailscale route %s: status=%d", path, status)
+						}
+					}
+					if f.apiCalls.Load() != before || f.whoIsCalls.Load() != whoBefore {
+						t.Fatal("disabled route performed backend or identity lookup")
+					}
+					if !apertureEnabled {
+						status, _, _ := apertureTransportRPC(t, listener.s, apertureEndpointPath, "", "initialize", map[string]any{})
+						if status != http.StatusNotFound {
+							t.Fatalf("both services disabled: status=%d", status)
+						}
+						return
+					}
+					session := apertureTransportInitialize(t, listener.s, apertureEndpointPath)
+					var tools mcp.ListToolsResult
+					apertureTransportResult(t, listener.s, apertureEndpointPath, session, "tools/list", map[string]any{}, &tools)
+					if len(tools.Tools) != 5 {
+						t.Fatalf("Aperture-only tools=%v", tools.Tools)
+					}
+					for _, tool := range tools.Tools {
+						if !strings.HasPrefix(tool.Name, "aperture_") {
+							t.Fatalf("disabled service tool advertised: %s", tool.Name)
+						}
+					}
+					var result mcp.CallToolResult
+					apertureTransportResult(t, listener.s, apertureEndpointPath, session, "tools/call", map[string]any{"name": "aperture_get_config", "arguments": map[string]any{}}, &result)
+					if result.IsError || f.apiCalls.Load() != before+1 {
+						t.Fatalf("Aperture-only call failed: %+v, backend calls=%d", result, f.apiCalls.Load()-before)
+					}
+					status, _, response := apertureTransportRPC(t, listener.s, apertureEndpointPath, session, "tools/call", map[string]any{"name": "tailscale_get_dns_configuration"})
+					if status != http.StatusOK || response["error"] == nil || f.apiCalls.Load() != before+1 {
+						t.Fatalf("Tailscale call accepted on Aperture: %d %s", status, response)
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestApertureTransportRouteIsolation(t *testing.T) {
-	f := newApertureTransportFixture(t, &MCPCapability{Tools: []string{"*"}, Resources: []string{"*"}})
+	f := newApertureTransportFixture(t, &MCPCapability{Tools: []string{"*"}, Resources: []string{"*"}}, true, true)
 	for _, listener := range []struct {
 		name string
 		s    *httptest.Server
@@ -286,7 +382,7 @@ func TestApertureTransportRouteIsolation(t *testing.T) {
 }
 
 func TestApertureTransportRequestGrants(t *testing.T) {
-	f := newApertureTransportFixture(t, &MCPCapability{Tools: []string{"tailscale_get_dns_configuration", "aperture_get_config"}})
+	f := newApertureTransportFixture(t, &MCPCapability{Tools: []string{"tailscale_get_dns_configuration", "aperture_get_config"}}, true, true)
 	for _, tc := range []struct{ path, tool string }{{mcpEndpointPath, "tailscale_get_dns_configuration"}, {legacyMCPEndpointPath, "tailscale_get_dns_configuration"}, {apertureEndpointPath, "aperture_get_config"}} {
 		t.Run(tc.path, func(t *testing.T) {
 			f.grant.Store(`{"tools":["*"]}`)
@@ -353,7 +449,7 @@ func TestApertureTransportRequestGrants(t *testing.T) {
 }
 
 func TestApertureTransportProtections(t *testing.T) {
-	f := newApertureTransportFixture(t, &MCPCapability{Tools: []string{"*"}})
+	f := newApertureTransportFixture(t, &MCPCapability{Tools: []string{"*"}}, true, true)
 	for _, s := range []*httptest.Server{f.peer, f.local} {
 		for _, path := range []string{mcpEndpointPath, legacyMCPEndpointPath, apertureEndpointPath} {
 			for _, variant := range []string{"host", "origin", "length", "chunked"} {

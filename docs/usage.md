@@ -23,7 +23,7 @@ brew install jaxxstorm/tap/tailscale-mcp
 
 ## Configuration
 
-Required environment variables for tailnet HTTP with OAuth credentials:
+Required environment variables for default Tailscale-enabled tailnet HTTP with OAuth credentials:
 
 ```bash
 export TAILSCALE_OAUTH_TOKEN='{"type":"oauth","clientId":"k123...","clientSecret":"tskey-client-...","scopes":["all"]}'
@@ -36,6 +36,8 @@ Optional environment variables:
 ```bash
 export TS_HOSTNAME="ts-mcp"
 export TSNET_STATE="file://"
+export TS_MCP_TAILSCALE=true
+export TS_MCP_APERTURE=false
 export APERTURE_URL="http://ai/aperture"
 ```
 
@@ -47,12 +49,14 @@ Command line options:
 
 * `--debug` / `-d`: Enable debug logging
 * `--version` / `-v`: Show version information offline, without credentials or network initialization
-* `--list-groups`: Print deterministic tool names, groups, and read-only classification for both HTTP service catalogs (Tailscale only with `--stdio`), then exit offline without credentials, tsnet startup, schema downloads, or upstream calls
+* `--list-groups`: Print deterministic tool names, groups, and read-only classification for enabled services, excluding Aperture with `--stdio`, then exit offline without credentials, tsnet startup, schema downloads, or upstream calls; an empty `[]` is allowed
 * `--oauth-client-id`: OAuth client ID to use when `TAILSCALE_OAUTH_TOKEN` is a raw `tskey-client-*` secret
 * `--advertise-tags`: Comma-separated Tailscale tags to advertise when minting tsnet auth keys from OAuth or federated credentials
 * `--state`: tsnet state location. Same as `TSNET_STATE`
-* `--stdio`: Use deprecated Tailscale-only stdio compatibility mode instead of Streamable HTTP; no Aperture client or tools are initialized
-* `--aperture-url` / `APERTURE_URL`: Operator-configured Aperture API base URL, default `http://ai/aperture`; not an MCP endpoint or tool argument
+* `--stdio`: Use deprecated Tailscale-only stdio compatibility mode instead of Streamable HTTP; Aperture enablement and URL are ignored, with no URL validation or Aperture client or tools initialized
+* `--tailscale` / `TS_MCP_TAILSCALE`: Boolean Tailscale MCP enablement, default `true`; `--tailscale=false` overrides an environment value of `true`. Disables the MCP service, not shared tsnet transport or identity
+* `--aperture` / `TS_MCP_APERTURE`: Boolean HTTP Aperture opt-in, default `false`; `--aperture` or `--aperture=true` enables its route, tools, upstream client, and startup endpoint URL logs. `--aperture=false` overrides an environment value of `true`
+* `--aperture-url` / `APERTURE_URL`: Operator-configured Aperture API base URL, default `http://ai/aperture`; not an MCP endpoint or tool argument. Setting it alone does not enable Aperture
 * `--local-grants` / `TS_MCP_LOCAL_GRANTS`: A single JSON object with `tools` and `resources` arrays of strings; unset or empty grants authorize nothing
 * `--local-http` / `TS_MCP_LOCAL_HTTP`: Enable additional loopback HTTP, default `false`; requires HTTP mode and an explicit non-empty local grant
 * `--local-port` / `TS_MCP_LOCAL_PORT`: Loopback port, default `8080`, independent of tailnet TLS and port
@@ -61,7 +65,7 @@ Command line options:
 
 Ports must be integers from 1 through 65535. Invalid ports, malformed local JSON, unknown fields, invalid field types, and contradictory listener options fail startup. Local grants are not a capability-key wrapper or an array of entries: use `{"tools":["list_all_devices"],"resources":[]}`. Configuring grants alone never opens loopback, and local grants never authorize tailnet callers.
 
-The Aperture base must be a complete HTTP(S) URL without userinfo, query, or fragment; invalid values fail before HTTP serving. A trailing slash is normalized without losing the base path, so `http://ai/aperture/` still targets operations under `/aperture`. Both MCP routes remain available when Aperture is unreachable; there is no live Aperture startup probe. See [Aperture identity and tools](aperture.md).
+When Aperture is disabled, its URL is not validated, no upstream Aperture client or tools are initialized, no Aperture endpoint URLs are logged, and `/aperture/mcp` returns 404 on both tailnet and enabled loopback listeners. Tailscale routes and behavior are unchanged. When enabled for HTTP serving, the Aperture base must be a complete HTTP(S) URL without userinfo, query, or fragment; invalid values fail before serving. A trailing slash is normalized without losing the base path, so `http://ai/aperture/` still targets operations under `/aperture`. Both enabled MCP services remain available when Aperture is unreachable; there is no live Aperture startup probe. See [Aperture identity and tools](aperture.md).
 
 ## tsnet State
 
@@ -123,7 +127,7 @@ export TSNET_STATE="aws://us-east-1/123456789012/parameter/tailscale/mcp?kmsKey=
 
 ## Credentials
 
-Create a Tailscale OAuth client or federated credential that can read tailnet settings at startup and perform every Admin API operation you expose through MCP.
+Create a Tailscale OAuth client or federated credential for tsnet enrollment in HTTP mode. When Tailscale MCP is enabled, it must also read tailnet settings at startup and perform every Admin API operation you expose through MCP. Aperture-only HTTP still needs `TAILSCALE_OAUTH_TOKEN` and advertised tags where applicable, but does not require `TAILSCALE_TAILNET` or Admin API read scopes.
 
 OAuth client JSON form:
 
@@ -163,11 +167,11 @@ Federated JSON requires `clientId` and exactly one of `idToken` or `idTokenFile`
 
 Both typed and generic Admin API clients reread and trim the file whenever federation needs a new assertion. A cached valid access token may be reused, so this is not a reread on every API request. Missing, unreadable, or empty files fail authentication without falling back to a stale assertion. Existing inline, OAuth, and bearer credential forms remain supported.
 
-tsnet uses a startup snapshot of the assertion; file rotation refreshes Admin API assertions, not continuous tsnet reauthentication, and does not obtain OIDC tokens automatically. Failure to obtain the startup snapshot is fatal. All serving modes, including stdio, validate Admin API access with the existing low-risk tailnet-settings read under a 30-second deadline before serving; retain permission for that read even when exposing only narrow tool grants. This is a credential-validation deadline, not a guarantee that all tsnet startup completes within 30 seconds.
+tsnet uses a startup snapshot of the assertion; file rotation refreshes Admin API assertions, not continuous tsnet reauthentication, and does not obtain OIDC tokens automatically. Failure to obtain the startup snapshot is fatal. When Tailscale MCP is enabled, HTTP and stdio validate Admin API access with the existing low-risk tailnet-settings read under a 30-second deadline before serving; retain permission for that read even when exposing only narrow Tailscale tool grants. Aperture-only HTTP skips Admin API client initialization and validation. This is a credential-validation deadline, not a guarantee that all tsnet startup completes within 30 seconds.
 
 For full OpenAPI coverage, grant the credential scopes or permissions for devices, DNS, policy files, tailnet settings, users, invites, keys, webhooks, services, logging, OAuth apps, and posture integrations. Mutating MCP tools also require the operation-specific `confirm` argument and matching Tailscale API write permissions.
 
-Aperture does not change these startup requirements or add an Aperture-only startup mode. Its requests use the running MCP tsnet node's identity, without relying on a host Tailscale daemon or forwarding the Admin API credential, incoming cookies, or caller identity headers. Grant that node upstream admin for configuration operations and explicit `read_pricing: true` for pricing, even if it is an admin. These roles do not grant downstream MCP access; callers still need the separate tool permissions described in the [Aperture guide](aperture.md#grants-and-discovery).
+Aperture-only startup uses `--tailscale=false --aperture`; it is not credential-free and retains shared tsnet enrollment and identity requirements. Aperture requests use the running MCP tsnet node's identity, without relying on a host Tailscale daemon or forwarding the Admin API credential, incoming cookies, or caller identity headers. Grant that node upstream admin for configuration operations and explicit `read_pricing: true` for pricing, even if it is an admin. These roles do not grant downstream MCP access; callers still need the separate tool permissions described in the [Aperture guide](aperture.md#grants-and-discovery).
 
 ## OAuth Grants And Access Control
 
@@ -215,7 +219,7 @@ Tool grants:
 
 Tool selectors have **OR semantics**, not intersection: `["read:*", "group:dns"]` permits every registered reader plus DNS writers. Unknown groups and unsupported selectors match nothing; arbitrary glob syntax is not supported. Read-only classification comes from trusted registration metadata, not the tool name. Authorized mutations still require their confirmation tokens and upstream write permissions; Aperture replacement additionally requires a concrete ETag.
 
-**Aperture expands existing wildcard grants:** `*` includes all five Aperture tools and `read:*` includes config get/validation and both pricing reads, but not replacement. `group:aperture-config` includes replacement; `group:aperture-config:read` excludes it. Both `group:aperture-pricing` and `group:aperture-pricing:read` permit the two pricing readers. Existing exact Tailscale names and Tailscale groups do not match Aperture. Audit both tailnet and local grants before upgrading; the broad Alice example above includes Aperture access.
+**Enabling Aperture expands existing wildcard grants:** Only when Aperture is enabled in HTTP mode, `*` includes all five Aperture tools and `read:*` includes config get/validation and both pricing reads, but not replacement. `group:aperture-config` includes replacement; `group:aperture-config:read` excludes it. Both `group:aperture-pricing` and `group:aperture-pricing:read` permit the two pricing readers. Existing exact Tailscale names and Tailscale groups do not match Aperture. No grant enables disabled tools. Audit both tailnet and local grants before enabling Aperture; only then does the broad Alice example above include Aperture access.
 
 Read-only is not non-sensitive: readers can expose policy, device/user information, logs, or key material visible to the server credential. Global, read, and group selectors can broaden permissions when matching tools are added on upgrade. Prefer exact tool names for tightly controlled deployments and review catalog changes before upgrading.
 
@@ -223,6 +227,11 @@ Tool and group names are stable permission identities. Inspect the actual config
 
 ```bash
 ./ts-mcp --list-groups
+./ts-mcp --list-groups --aperture
+./ts-mcp --list-groups --tailscale=false --aperture
+./ts-mcp --list-groups --tailscale=false --aperture=false  # []
+./ts-mcp --list-groups --stdio --tailscale=false --aperture  # []
+TS_MCP_APERTURE=true ./ts-mcp --list-groups --aperture=false
 ./ts-mcp --list-groups --stdio
 TAILSCALE_LOCAL_CLI=1 ./ts-mcp --list-groups
 ```
@@ -262,7 +271,25 @@ Streamable HTTP is the default transport:
 ./ts-mcp
 ```
 
-By default the tailnet listener exposes `http://<hostname>.yourtailnet.ts.net:8080/tailscale/mcp` and `http://<hostname>.yourtailnet.ts.net:8080/aperture/mcp` on the same port; no loopback listener opens. Tailscale and Aperture are independent MCP servers with separate catalogs and sessions. `/tailscale/mcp` is the preferred explicit Tailscale route; `/mcp` remains a backward-compatible alias without a redirect, using the same Tailscale handler, server, catalog, and session state. Both Tailscale paths receive identical grants and transport protections on tailnet and enabled loopback listeners. Tailscale tools, resources, and prompts exist only on the Tailscale surface; Aperture has only its five tools and adds no resources or prompts. Calls to the wrong service are unavailable, and session IDs do not transfer state or permissions between services.
+By default the tailnet listener exposes `http://<hostname>.yourtailnet.ts.net:8080/tailscale/mcp` and its `/mcp` alias; no loopback listener opens and Aperture is disabled. `/tailscale/mcp` is the preferred explicit Tailscale route; `/mcp` remains a backward-compatible alias without a redirect, using the same Tailscale handler, server, catalog, and session state. Both Tailscale paths receive identical grants and transport protections on tailnet and enabled loopback listeners.
+
+To also enable Aperture on the same listener and port:
+
+```bash
+./ts-mcp --aperture=true
+```
+
+This adds `http://<hostname>.yourtailnet.ts.net:8080/aperture/mcp`. Tailscale and Aperture are independent MCP servers with separate catalogs and sessions. Tailscale tools, resources, and prompts exist only on the Tailscale surface; enabled Aperture has only its five tools and adds no resources or prompts. Calls to the wrong service are unavailable, and session IDs do not transfer state or permissions between services.
+
+To serve Aperture only, with the existing tsnet enrollment credential and advertised tags where applicable configured:
+
+```bash
+./ts-mcp --tailscale=false --aperture
+```
+
+Both `/mcp` and `/tailscale/mcp` return 404 on tailnet and enabled loopback listeners. Tailscale tools, resources, prompts, and Admin API clients are not initialized, Admin API validation is skipped, and no Tailscale MCP endpoint URLs are logged. Neither `TAILSCALE_TAILNET` nor Admin API read scopes are required; shared tsnet transport and identity remain active. Grants cannot enable disabled services.
+
+Serving with both services disabled fails before any network access. Stdio requires Tailscale enabled: `--stdio --tailscale=false` fails before network access even with `--aperture`. Informational `--version` and `--list-groups` bypass these serving checks and remain offline; listing includes only enabled services, ignores Aperture in stdio, and returns `[]` when no services are included.
 
 To enable tailnet HTTPS:
 
@@ -270,7 +297,7 @@ To enable tailnet HTTPS:
 ./ts-mcp --tls
 ```
 
-Enable MagicDNS and HTTPS certificates in the tailnet and use the node's fully qualified `*.ts.net` name. Tailscale-issued certificates can publish that DNS name in public certificate transparency logs; choose the hostname accordingly. TLS listener/certificate failures never fall back to plaintext. The default HTTPS URLs are `https://<hostname>.yourtailnet.ts.net:443/tailscale/mcp` and `https://<hostname>.yourtailnet.ts.net:443/aperture/mcp`; `--tls --port 8443` changes both to port 8443. Use the full endpoint URLs logged at startup.
+Enable MagicDNS and HTTPS certificates in the tailnet and use the node's fully qualified `*.ts.net` name. Tailscale-issued certificates can publish that DNS name in public certificate transparency logs; choose the hostname accordingly. TLS listener/certificate failures never fall back to plaintext. The default HTTPS URL is `https://<hostname>.yourtailnet.ts.net:443/tailscale/mcp` (also available via `/mcp`). Running `./ts-mcp --tls --aperture` additionally serves `https://<hostname>.yourtailnet.ts.net:443/aperture/mcp`; `--tls --port 8443` changes all enabled tailnet routes to port 8443. Use the full endpoint URLs logged at startup; Aperture URLs are logged only when Aperture is enabled in HTTP mode.
 
 Tailnet HTTP Host checks accept only the ready node's full/short DNS name or Tailscale IPs at the configured port. Arbitrary DNS aliases and reverse-proxy Host overrides are rejected, even with a matching Origin. For HTTPS, use the fully qualified certificate name. Forwarded headers do not establish the expected hostname, scheme, or caller identity.
 
@@ -283,7 +310,7 @@ To additionally enable loopback with narrow permissions:
   --local-grants '{"tools":["list_all_devices"],"resources":["bootstrap://status"]}'
 ```
 
-This leaves both tailnet HTTPS routes on port 443 and adds plain HTTP at `http://127.0.0.1:8081/tailscale/mcp` and `http://127.0.0.1:8081/aperture/mcp`. The example grants no Aperture access. Without `--local-port`, loopback uses 8080 even with TLS. Loopback binds only `127.0.0.1`, but **every process able to connect receives the same local grants**. This is not same-user authentication or a multi-user service. Avoid it on untrusted shared hosts and do not proxy or forward it to other users. Host/DNS-rebinding and Origin checks do not authenticate local processes. Both routes use only these local grants on loopback; they never authorize tailnet callers.
+This leaves the Tailscale tailnet HTTPS routes on port 443 and adds plain HTTP at `http://127.0.0.1:8081/tailscale/mcp` and its `/mcp` alias. Adding `--aperture` would also enable `/aperture/mcp` on both listeners, but the example grants no Aperture access. Without `--local-port`, loopback uses 8080 even with TLS. Loopback binds only `127.0.0.1`, but **every process able to connect receives the same local grants**. This is not same-user authentication or a multi-user service. Avoid it on untrusted shared hosts and do not proxy or forward it to other users. Host/DNS-rebinding and Origin checks do not authenticate local processes. All enabled routes use only these local grants on loopback; they never authorize tailnet callers.
 
 When present, Origin must be a single HTTP(S) origin matching the listener's scheme, hostname, and effective port. Lookalike hosts, `null`, paths, queries, fragments, and multiple origins are rejected. Forwarded headers do not override identity or scheme. Non-browser clients may omit Origin, but still undergo Host and grant checks.
 
@@ -293,7 +320,7 @@ Deprecated stdio compatibility mode is available for older local clients that ca
 ./ts-mcp --stdio --local-grants '{"tools":["list_all_devices"],"resources":[]}'
 ```
 
-Stdio is Tailscale-only: it opens no HTTP listeners, registers no Aperture tools, and never initializes tsnet or the Aperture client or requires advertised tags. It still validates Admin API credentials and denies protected operations without local grants. Do not combine stdio with local HTTP opt-in. Use Streamable HTTP for Aperture.
+Stdio is Tailscale-only: it opens no HTTP listeners, registers no Aperture tools, and never initializes tsnet or the Aperture client or requires advertised tags. It ignores `--aperture` / `TS_MCP_APERTURE` and the Aperture URL, without validating that URL, even when explicitly enabled. It still validates Admin API credentials and denies protected operations without local grants. Do not combine stdio with local HTTP opt-in. Use Streamable HTTP with `--aperture` for Aperture.
 
 ### Limits And Shutdown
 
@@ -303,15 +330,15 @@ SIGINT/SIGTERM stops both listeners, cancels request/stream contexts, and drains
 
 ## Claude Desktop Integration
 
-Use Claude Desktop's Streamable HTTP remote MCP configuration when available. Create separate entries for Tailscale and Aperture using the same host and port. Choose the URLs matching your listener; loopback requires explicit local HTTP opt-in with narrow grants:
+Use Claude Desktop's Streamable HTTP remote MCP configuration when available. Create entries only for enabled services, using separate entries on the same host and port when both are enabled. Every Tailscale URL below requires Tailscale enabled (the default); every Aperture URL requires `--aperture` (or `TS_MCP_APERTURE=true`), and loopback additionally requires explicit local HTTP opt-in with narrow grants:
 
 | Listener | Tailscale Client URL | Aperture Client URL |
 |---|---|---|
-| Default tailnet HTTP | `http://<hostname>.yourtailnet.ts.net:8080/tailscale/mcp` | `http://<hostname>.yourtailnet.ts.net:8080/aperture/mcp` |
-| Tailnet with `--tls` | `https://<hostname>.yourtailnet.ts.net:443/tailscale/mcp` | `https://<hostname>.yourtailnet.ts.net:443/aperture/mcp` |
-| Loopback with `--local-http --local-port 8081` | `http://127.0.0.1:8081/tailscale/mcp` | `http://127.0.0.1:8081/aperture/mcp` |
+| Tailnet HTTP with `--aperture` | `http://<hostname>.yourtailnet.ts.net:8080/tailscale/mcp` | `http://<hostname>.yourtailnet.ts.net:8080/aperture/mcp` |
+| Tailnet with `--tls --aperture` | `https://<hostname>.yourtailnet.ts.net:443/tailscale/mcp` | `https://<hostname>.yourtailnet.ts.net:443/aperture/mcp` |
+| Loopback with `--aperture --local-http --local-port 8081` | `http://127.0.0.1:8081/tailscale/mcp` | `http://127.0.0.1:8081/aperture/mcp` |
 
-Existing `/mcp` URLs continue to work without redirects; use `/tailscale/mcp` for new configurations as the preferred explicit route. The two Tailscale paths share session state, but every request uses its current trusted grants. Each entry discovers only its service's authorized tools. Use separate sessions for Tailscale and Aperture; a session ID is neither a cross-service handle nor an authorization credential.
+While Tailscale is enabled, existing `/mcp` URLs continue to work without redirects; use `/tailscale/mcp` for new configurations as the preferred explicit route. The two Tailscale paths share session state, but every request uses its current trusted grants. Each entry discovers only its service's authorized tools. Use separate sessions for Tailscale and Aperture; a session ID is neither a cross-service handle nor an authorization credential. With `--tailscale=false --aperture`, configure only the Aperture entry.
 
 For older Claude Desktop versions that only support local stdio MCP servers, use the deprecated Tailscale-only compatibility mode temporarily (this cannot expose Aperture):
 
@@ -333,7 +360,7 @@ For older Claude Desktop versions that only support local stdio MCP servers, use
 
 ## Tools And Resources
 
-The following Tailscale tools and resources are on `/tailscale/mcp` and its backward-compatible `/mcp` alias (or deprecated stdio). For the five tools on `/aperture/mcp`, see [Aperture tools, inputs, and safety workflow](aperture.md). Aperture adds no resources or prompts.
+When Tailscale is enabled, the following Tailscale tools and resources are on `/tailscale/mcp` and its backward-compatible `/mcp` alias (or deprecated stdio). They are absent when Tailscale is disabled, including optional local CLI tools regardless of `TAILSCALE_LOCAL_CLI`. For the five tools on `/aperture/mcp` when enabled with `--aperture`, see [Aperture tools, inputs, and safety workflow](aperture.md). Aperture adds no resources or prompts.
 
 Core tools:
 
@@ -374,7 +401,7 @@ These three APIs are **Alpha** and their upstream contracts may change. They are
 | `tailscale_create_organization_tailnet` | `POST /organizations/{organization}/tailnets` | `createOrganizationTailnet` | `tailnets` |
 | `tailscale_delete_tailnet` | `DELETE /tailnet/{tailnet}` | `deleteTailnet` | `all` |
 
-Upstream scopes authorize the **server credential**, not the MCP caller. They do not replace `jaxxstorm.com/cap/mcp` grants. Startup requirements are unchanged: all serving modes, including stdio, first read settings for `TAILSCALE_TAILNET`; tailnet HTTP also requires authority to mint the tagged tsnet auth key and `TS_ADVERTISE_TAGS`. Organization-only credentials with `tailnets:read` or `tailnets` may therefore fail startup even if they can invoke the organization endpoint directly. This release does not add an organization-only startup mode or separate per-tool credentials.
+Upstream scopes authorize the **server credential**, not the MCP caller. They do not replace `jaxxstorm.com/cap/mcp` grants. With Tailscale MCP enabled, HTTP and stdio first read settings for `TAILSCALE_TAILNET`; tailnet HTTP also requires authority to mint the tagged tsnet auth key and `TS_ADVERTISE_TAGS`. Organization-only credentials with `tailnets:read` or `tailnets` may therefore fail startup even if they can invoke the organization endpoint directly. Disabling Tailscale MCP skips that read but also removes all organization tools; it is not an organization-only startup mode or separate per-tool credential mechanism.
 
 #### Listing One Page
 
@@ -550,11 +577,11 @@ Before upgrading, migrate implicit resource prefixes, explicitly opt into loopba
 
 For the Aperture release:
 
-1. Audit existing `*` and `read:*` grants, including `TS_MCP_LOCAL_GRANTS`; they now match Aperture tools. Use reviewed exact names or service groups if that expansion is unwanted.
-2. Grant the MCP tsnet node only its intended upstream Aperture roles: admin for configuration and explicit `read_pricing: true` for pricing. Set `APERTURE_URL` if the upstream is not `http://ai/aperture`. Keep the existing Tailscale startup credentials and tags.
-3. Deploy without changing existing `/mcp` clients. Prefer `/tailscale/mcp` for new configurations; both paths use the same Tailscale handler, server, and session state without redirects, with identical grants and protections on tailnet and enabled loopback. Add a separate `/aperture/mcp` entry on the same host/port if needed. Existing Tailscale names, grants, resources, prompts, and mutation safeguards are unchanged.
+1. Aperture is disabled by default. Before enabling it, audit existing `*` and `read:*` grants, including `TS_MCP_LOCAL_GRANTS`; they match Aperture tools only when enabled in HTTP mode. Use reviewed exact names or service groups if that expansion is unwanted. Compare `--list-groups --aperture=false` with `--list-groups --aperture` offline.
+2. If using Aperture, grant the MCP tsnet node only its intended upstream roles: admin for configuration and explicit `read_pricing: true` for pricing. Enable with `--aperture` or `TS_MCP_APERTURE=true` and set `APERTURE_URL` if the upstream is not `http://ai/aperture`; the URL alone does not enable it. `--aperture=false` overrides the environment opt-in. Keep the existing Tailscale startup credentials and tags.
+3. Keep Tailscale enabled (the default) to preserve existing `/mcp` clients. Prefer `/tailscale/mcp` for new configurations; both paths use the same Tailscale handler, server, and session state without redirects, with identical grants and protections on tailnet and enabled loopback. Add a separate `/aperture/mcp` entry on the same host/port only when Aperture is enabled. For Aperture-only deployment, use `--tailscale=false --aperture` and remove Tailscale client entries; neither Tailscale route remains available. Existing Tailscale names, grants, resources, prompts, and mutation safeguards are unchanged when enabled.
 4. Verify route isolation and authorization offline. An optional non-mutating tailnet smoke test requires the node's upstream roles and the caller's MCP grants; do not perform live configuration replacement without explicit operator approval and a prepared full replacement.
-5. To roll back to a binary that supports only `/mcp`, deploy it and change Tailscale clients using `/tailscale/mcp` to `/mcp`; existing `/mcp` clients need no URL change. Remove Aperture client entries and unsupported Aperture options, and review grants for the older binary. MCP binary rollback does not revert upstream Aperture configuration writes; inspect authoritative state before any deliberate recovery write.
+5. To roll back to a binary that supports only `/mcp`, deploy it and change Tailscale clients using `/tailscale/mcp` to `/mcp`; existing `/mcp` clients need no URL change. Remove Aperture client entries and unsupported service options, and review grants for the older binary. An Aperture-only deployment must restore the older binary's required `TAILSCALE_TAILNET` and Admin API startup read access; older binaries cannot preserve Aperture-only serving. MCP binary rollback does not revert upstream Aperture configuration writes; inspect authoritative state before any deliberate recovery write.
 
 Older binaries may not understand the new flags, environment variables, `idTokenFile`, or tool selectors. Before rollback, remove unsupported options and translate selectors into reviewed exact grants; arrange a supported credential source rather than exposing token contents. Reverting can restore unsafe implicit resource-prefix authorization and unconditional loopback behavior, so prefer a forward fix and isolate an older deployment if rollback is unavoidable. No persisted-state migration is introduced; protect existing operator-owned state and never substitute fork-bundled state.
 

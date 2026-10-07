@@ -17,6 +17,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -169,8 +170,22 @@ func TestStartupIntegrationCLI(t *testing.T) {
 		env                               map[string]string
 		port, local                       int
 		explicitPort, explicitLocal, fail bool
+		aperture                          bool
+		tailscaleDisabled                 bool
+		apertureURL                       string
 	}{
 		{name: "defaults", port: 8080, local: 8080},
+		{name: "Tailscale disabled flag", args: []string{"--tailscale=false"}, tailscaleDisabled: true, port: 8080, local: 8080},
+		{name: "Tailscale disabled environment", env: map[string]string{"TS_MCP_TAILSCALE": "false"}, tailscaleDisabled: true, port: 8080, local: 8080},
+		{name: "Tailscale enabled environment", env: map[string]string{"TS_MCP_TAILSCALE": "true"}, port: 8080, local: 8080},
+		{name: "Tailscale flag disables environment", args: []string{"--tailscale=false"}, env: map[string]string{"TS_MCP_TAILSCALE": "true"}, tailscaleDisabled: true, port: 8080, local: 8080},
+		{name: "Tailscale flag enables over environment", args: []string{"--tailscale"}, env: map[string]string{"TS_MCP_TAILSCALE": "false"}, port: 8080, local: 8080},
+		{name: "Aperture flag", args: []string{"--aperture"}, aperture: true, port: 8080, local: 8080},
+		{name: "Aperture environment", env: map[string]string{"TS_MCP_APERTURE": "true"}, aperture: true, port: 8080, local: 8080},
+		{name: "Aperture flag disables environment", args: []string{"--aperture=false"}, env: map[string]string{"TS_MCP_APERTURE": "true"}, port: 8080, local: 8080},
+		{name: "Aperture flag enables over environment", args: []string{"--aperture"}, env: map[string]string{"TS_MCP_APERTURE": "false"}, aperture: true, port: 8080, local: 8080},
+		{name: "Aperture URL alone", args: []string{"--aperture-url=invalid://unused"}, apertureURL: "invalid://unused", port: 8080, local: 8080},
+		{name: "Aperture URL environment alone", env: map[string]string{"APERTURE_URL": "invalid://unused"}, apertureURL: "invalid://unused", port: 8080, local: 8080},
 		{name: "TLS flag", args: []string{"--tls", "--local-http"}, port: 443, local: 8080},
 		{name: "environment", env: map[string]string{"TS_TLS": "true", "TS_PORT": "8443", "TS_MCP_LOCAL_HTTP": "true", "TS_MCP_LOCAL_PORT": "9090", "TS_MCP_LOCAL_GRANTS": `{"tools":["read:*"]}`}, port: 8443, local: 9090, explicitPort: true, explicitLocal: true},
 		{name: "flags override environment", args: []string{"--tls=false", "--port=8081", "--local-http", "--local-port=9091"}, env: map[string]string{"TS_TLS": "true", "TS_PORT": "8443", "TS_MCP_LOCAL_PORT": "9090"}, port: 8081, local: 9091, explicitPort: true, explicitLocal: true},
@@ -193,8 +208,15 @@ func TestStartupIntegrationCLI(t *testing.T) {
 			if _, err := parser.Parse(tc.args); err != nil {
 				t.Fatal(err)
 			}
-			if cli.ApertureURL != "http://ai/aperture" {
-				t.Fatalf("default Aperture URL=%q", cli.ApertureURL)
+			wantURL := tc.apertureURL
+			if cli.Tailscale != !tc.tailscaleDisabled {
+				t.Fatalf("Tailscale enabled=%v, want %v", cli.Tailscale, !tc.tailscaleDisabled)
+			}
+			if wantURL == "" {
+				wantURL = "http://ai/aperture"
+			}
+			if cli.Aperture != tc.aperture || cli.ApertureURL != wantURL {
+				t.Fatalf("Aperture enabled=%v URL=%q, want enabled=%v URL=%q", cli.Aperture, cli.ApertureURL, tc.aperture, wantURL)
 			}
 			if (cli.Port != nil) != tc.explicitPort || (cli.LocalPort != nil) != tc.explicitLocal {
 				t.Fatalf("pointer presence lost: port=%v local=%v", cli.Port, cli.LocalPort)
@@ -211,7 +233,7 @@ func TestStartupIntegrationCLI(t *testing.T) {
 }
 
 func TestStartupIntegrationOffline(t *testing.T) {
-	for _, args := range [][]string{{"--version"}, {"--list-groups"}, {"--list-groups", "--local-cli"}, {"--list-groups", "--stdio"}} {
+	for _, args := range [][]string{{"--version"}, {"--version", "--aperture"}, {"--version", "--tailscale=false"}, {"--version", "--tailscale=false", "--stdio", "--aperture"}, {"--list-groups"}, {"--list-groups", "--local-cli"}, {"--list-groups", "--stdio"}, {"--list-groups", "--aperture"}, {"--list-groups", "--local-cli", "--aperture"}, {"--list-groups", "--stdio", "--aperture"}, {"--list-groups", "--tailscale=false"}, {"--list-groups", "--tailscale=false", "--local-cli"}, {"--list-groups", "--tailscale=false", "--aperture"}, {"--list-groups", "--tailscale=false", "--local-cli", "--aperture"}, {"--list-groups", "--tailscale=false", "--stdio", "--aperture"}} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			var previous []byte
 			for range 2 {
@@ -227,11 +249,24 @@ func TestStartupIntegrationOffline(t *testing.T) {
 					}
 				} else {
 					var expected bytes.Buffer
-					if err := writeToolGroups(&expected, len(args) == 2 && args[1] == "--local-cli", len(args) == 2 && args[1] == "--stdio"); err != nil {
+					cli := CLI{Tailscale: !slices.Contains(args, "--tailscale=false"), LocalCLI: slices.Contains(args, "--local-cli"), Stdio: slices.Contains(args, "--stdio"), Aperture: slices.Contains(args, "--aperture")}
+					if err := writeToolGroups(&expected, cli); err != nil {
 						t.Fatal(err)
 					}
 					if !bytes.Equal(output, expected.Bytes()) {
 						t.Fatal("main group listing differs from configured catalog")
+					}
+					if !cli.Tailscale {
+						if bytes.Contains(output, []byte("tailscale_")) {
+							t.Fatal("disabled Tailscale advertised tools")
+						}
+						if !cli.Aperture || cli.Stdio {
+							if strings.TrimSpace(string(output)) != "[]" {
+								t.Fatalf("no active catalog: %s", output)
+							}
+						} else if !bytes.Contains(output, []byte("aperture_get_config")) {
+							t.Fatal("Aperture-only catalog missing tools")
+						}
 					}
 				}
 				if previous != nil && !bytes.Equal(previous, output) {
@@ -267,10 +302,27 @@ func TestStartupIntegrationRejectsLocalConfigBeforeNetwork(t *testing.T) {
 	}
 }
 
+func TestStartupIntegrationDisabledServicesBeforeNetwork(t *testing.T) {
+	for _, args := range [][]string{{"--tailscale=false"}, {"--tailscale=false", "--stdio"}, {"--tailscale=false", "--stdio", "--aperture"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			for _, credential := range []string{"", "{", "test-only-token"} {
+				cmd, stderr := startupCommand(t, "offline", append(args, "--credential="+credential)...)
+				if err := cmd.Run(); err == nil {
+					t.Fatal("startup accepted no active service")
+				}
+				message := strings.ToLower(stderr.String())
+				if !strings.Contains(message, "--tailscale") || (slices.Contains(args, "--stdio") && !strings.Contains(message, "--stdio")) || strings.Contains(message, "offline startup attempted http") || strings.Contains(message, "tailscale_tailnet is required") || strings.Contains(message, "tailscale_oauth_token") {
+					t.Fatalf("service rejection did not precede credential/network setup: %s", stderr)
+				}
+			}
+		})
+	}
+}
+
 func TestStartupIntegrationURLConfiguration(t *testing.T) {
 	for _, raw := range []string{"", "ai/aperture", "ftp://ai/aperture", "http://user:secret@ai/aperture", "http://ai/aperture?x=1", "http://ai/aperture#fragment"} {
 		t.Run(raw, func(t *testing.T) {
-			cmd, stderr := startupCommand(t, "offline", "--tailnet=test", "--credential=test-only-token", "--aperture-url="+raw)
+			cmd, stderr := startupCommand(t, "offline", "--tailnet=test", "--credential=test-only-token", "--aperture", "--aperture-url="+raw)
 			if err := cmd.Run(); err == nil || !strings.Contains(strings.ToLower(stderr.String()), "aperture") || strings.Contains(stderr.String(), "offline startup attempted HTTP") {
 				t.Fatalf("URL was not rejected before network access: %v %s", err, stderr)
 			}
@@ -388,7 +440,7 @@ func TestStartupIntegrationConfiguredTransports(t *testing.T) {
 						grant["tools"] = selectors
 					}
 					raw, _ := json.Marshal(grant)
-					args := []string{"--stdio", "--local-cli", "--tailnet=test", `--credential={"type":"oauth","clientId":"test","clientSecret":"test-only-secret"}`, "--state=invalid://stdio-must-ignore", "--aperture-url=invalid://stdio-must-ignore"}
+					args := []string{"--stdio", "--local-cli", "--tailnet=test", `--credential={"type":"oauth","clientId":"test","clientSecret":"test-only-secret"}`, "--state=invalid://stdio-must-ignore", "--aperture", "--aperture-url=invalid://stdio-must-ignore"}
 					if selectors != nil {
 						args = append(args, "--local-grants="+string(raw))
 					}

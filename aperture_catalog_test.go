@@ -180,15 +180,17 @@ func TestApertureIndependentCatalogs(t *testing.T) {
 
 func TestOfflineApertureCatalogSelection(t *testing.T) {
 	for _, stdio := range []bool{false, true} {
-		var first, second bytes.Buffer
-		if err := writeToolGroups(&first, false, stdio); err != nil {
-			t.Fatal(err)
-		}
-		if err := writeToolGroups(&second, false, stdio); err != nil {
-			t.Fatal(err)
-		}
-		if first.String() != second.String() || strings.Contains(first.String(), "aperture_get_config") == stdio {
-			t.Fatal("offline catalog is nondeterministic or includes wrong service")
+		for _, enabled := range []bool{false, true} {
+			var first, second bytes.Buffer
+			if err := writeToolGroups(&first, CLI{Tailscale: true, Stdio: stdio, Aperture: enabled}); err != nil {
+				t.Fatal(err)
+			}
+			if err := writeToolGroups(&second, CLI{Tailscale: true, Stdio: stdio, Aperture: enabled}); err != nil {
+				t.Fatal(err)
+			}
+			if first.String() != second.String() || strings.Contains(first.String(), "aperture_get_config") != (enabled && !stdio) {
+				t.Fatal("offline catalog is nondeterministic or includes wrong service")
+			}
 		}
 	}
 }

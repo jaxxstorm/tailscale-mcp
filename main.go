@@ -43,8 +43,10 @@ import (
 )
 
 type CLI struct {
+	Tailscale     bool   `env:"TS_MCP_TAILSCALE" default:"true" help:"Enable Tailscale MCP (required for stdio)"`
+	Aperture      bool   `env:"TS_MCP_APERTURE" help:"Enable Aperture MCP in HTTP mode (disabled by default)"`
 	ApertureURL   string `name:"aperture-url" env:"APERTURE_URL" default:"http://ai/aperture" help:"Aperture API base URL accessed through the MCP node's Tailscale identity"`
-	Tailnet       string `env:"TAILSCALE_TAILNET" help:"Tailnet name required when serving MCP"`
+	Tailnet       string `env:"TAILSCALE_TAILNET" help:"Tailnet name required when Tailscale MCP is enabled"`
 	Credential    string `env:"TAILSCALE_OAUTH_TOKEN" help:"OAuth, federated, or bearer credential required for Tailscale startup and API access"`
 	OAuthClientID string `name:"oauth-client-id" env:"TAILSCALE_OAUTH_CLIENT_ID" help:"OAuth client ID to use when TAILSCALE_OAUTH_TOKEN is a raw tskey-client secret"`
 	Hostname      string `env:"TS_HOSTNAME" default:"ts-mcp"`
@@ -708,10 +710,14 @@ func loggingMiddleware(next http.Handler) http.Handler {
 
 func mcpHTTPHandler(streamable, apertureStreamable http.Handler, authorize func(http.Handler) http.Handler) http.Handler {
 	mux := http.NewServeMux()
-	tailscaleHandler := authorize(streamable)
-	mux.Handle(mcpEndpointPath, tailscaleHandler)
-	mux.Handle(legacyMCPEndpointPath, tailscaleHandler)
-	mux.Handle(apertureEndpointPath, authorize(apertureStreamable))
+	if streamable != nil {
+		tailscaleHandler := authorize(streamable)
+		mux.Handle(mcpEndpointPath, tailscaleHandler)
+		mux.Handle(legacyMCPEndpointPath, tailscaleHandler)
+	}
+	if apertureStreamable != nil {
+		mux.Handle(apertureEndpointPath, authorize(apertureStreamable))
+	}
 	return loggingMiddleware(strictOriginMiddleware(bodyLimitMiddleware(mux, 0)))
 }
 
@@ -743,10 +749,16 @@ func run(ctx context.Context, cli CLI) (retErr error) {
 		return nil
 	}
 	if cli.ListGroups {
-		return writeToolGroups(os.Stdout, cli.LocalCLI, cli.Stdio)
+		return writeToolGroups(os.Stdout, cli)
 	}
-	if strings.TrimSpace(cli.Tailnet) == "" {
-		return errors.New("TAILSCALE_TAILNET is required when serving MCP")
+	if cli.Stdio && !cli.Tailscale {
+		return errors.New("--stdio requires Tailscale MCP to be enabled (--tailscale)")
+	}
+	if !cli.Tailscale && !cli.Aperture {
+		return errors.New("at least one MCP service must be enabled (--tailscale or --aperture)")
+	}
+	if cli.Tailscale && strings.TrimSpace(cli.Tailnet) == "" {
+		return errors.New("TAILSCALE_TAILNET is required when Tailscale MCP is enabled")
 	}
 	port, localPort, err := resolvePorts(cli.Port, cli.LocalPort, cli.TLS, cli.LocalHTTP, cli.Stdio)
 	if err != nil {
@@ -759,7 +771,7 @@ func run(ctx context.Context, cli CLI) (retErr error) {
 	if err := validateLocalHTTP(cli.LocalHTTP, cli.Stdio, localGrants); err != nil {
 		return err
 	}
-	if !cli.Stdio {
+	if !cli.Stdio && cli.Aperture {
 		if err := aperture.ValidateBaseURL(cli.ApertureURL); err != nil {
 			return err
 		}
@@ -786,21 +798,23 @@ func run(ctx context.Context, cli CLI) (retErr error) {
 	}
 	logger.Info("Configured Tailscale credential", zap.String("credential_type", string(credential.Kind)))
 
-	tsAdminClient := &tsapi.Client{
-		Tailnet: cli.Tailnet,
-		Auth:    credential.AdminAuth(),
-	}
-	readAPIClient := readapi.Client{
-		Tailnet:    cli.Tailnet,
-		HTTPClient: credential.AdminHTTPClient(nil, "https://api.tailscale.com"),
-	}
-	if err := ValidateCredential(ctx, tsAdminClient); err != nil {
-		return err
-	}
-
-	mcpServer, _, err := newConfiguredMCPServer(tsAdminClient, readAPIClient, cli.LocalCLI)
-	if err != nil {
-		return err
+	var mcpServer *server.MCPServer
+	if cli.Tailscale {
+		tsAdminClient := &tsapi.Client{
+			Tailnet: cli.Tailnet,
+			Auth:    credential.AdminAuth(),
+		}
+		readAPIClient := readapi.Client{
+			Tailnet:    cli.Tailnet,
+			HTTPClient: credential.AdminHTTPClient(nil, "https://api.tailscale.com"),
+		}
+		if err := ValidateCredential(ctx, tsAdminClient); err != nil {
+			return err
+		}
+		mcpServer, _, err = newConfiguredMCPServer(tsAdminClient, readAPIClient, cli.LocalCLI)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Deprecated stdio compatibility mode.
@@ -866,20 +880,26 @@ func serveMCPHTTP(ctx context.Context, tsServer tailnetServer, mcpServer *server
 	if err != nil {
 		return fmt.Errorf("tailnet local client: %w", err)
 	}
-	apertureTransport := http.DefaultTransport.(*http.Transport).Clone()
-	apertureTransport.Proxy = nil
-	apertureTransport.DialContext = tsServer.Dial
-	apertureClient, err := aperture.NewClient(cli.ApertureURL, apertureTransport)
-	if err != nil {
-		return err
+	var apertureStreamable http.Handler
+	if cli.Aperture {
+		apertureTransport := http.DefaultTransport.(*http.Transport).Clone()
+		apertureTransport.Proxy = nil
+		apertureTransport.DialContext = tsServer.Dial
+		apertureClient, err := aperture.NewClient(cli.ApertureURL, apertureTransport)
+		if err != nil {
+			return err
+		}
+		defer apertureClient.CloseIdleConnections()
+		apertureServer, _, err := newApertureMCPServer(apertureClient)
+		if err != nil {
+			return err
+		}
+		apertureStreamable = server.NewStreamableHTTPServer(apertureServer, server.WithEndpointPath(apertureEndpointPath))
 	}
-	defer apertureClient.CloseIdleConnections()
-	apertureServer, _, err := newApertureMCPServer(apertureClient)
-	if err != nil {
-		return err
+	var streamable http.Handler
+	if cli.Tailscale {
+		streamable = server.NewStreamableHTTPServer(mcpServer, server.WithEndpointPath(mcpEndpointPath))
 	}
-	streamable := server.NewStreamableHTTPServer(mcpServer, server.WithEndpointPath(mcpEndpointPath))
-	apertureStreamable := server.NewStreamableHTTPServer(apertureServer, server.WithEndpointPath(apertureEndpointPath))
 	tailnetHandler, err := tailnetHostMiddleware(mcpHTTPHandler(streamable, apertureStreamable, func(next http.Handler) http.Handler {
 		return peerGrantMiddleware(next, localClient.WhoIs)
 	}), status, port, cli.TLS)
@@ -902,14 +922,23 @@ func serveMCPHTTP(ctx context.Context, tsServer tailnetServer, mcpServer *server
 	if status.Self != nil && status.Self.DNSName != "" {
 		host = strings.TrimSuffix(status.Self.DNSName, ".")
 	}
-	logger.Info("Serving MCP via Tailscale", zap.String("transport", streamableHTTPTransportName), zap.String("url", endpointURL(host, port, cli.TLS, mcpEndpointPath)))
-	logger.Info("Serving Aperture MCP via Tailscale", zap.String("transport", streamableHTTPTransportName), zap.String("url", endpointURL(host, port, cli.TLS, apertureEndpointPath)))
+	if cli.Tailscale {
+		logger.Info("Serving MCP via Tailscale", zap.String("transport", streamableHTTPTransportName), zap.String("url", endpointURL(host, port, cli.TLS, mcpEndpointPath)))
+	}
+	if cli.Aperture {
+		logger.Info("Serving Aperture MCP via Tailscale", zap.String("transport", streamableHTTPTransportName), zap.String("url", endpointURL(host, port, cli.TLS, apertureEndpointPath)))
+	}
 	bindings := []httpServerListener{{Server: newHTTPServer(tailnetHandler), Listener: listeners[0]}}
 	if cli.LocalHTTP {
 		localHandler := mcpHTTPHandler(streamable, apertureStreamable, func(next http.Handler) http.Handler { return localGrantMiddleware(next, localGrants) })
 		bindings = append(bindings, httpServerListener{Server: newHTTPServer(localHandler), Listener: listeners[1]})
-		logger.Warn("Trusted loopback MCP enabled for every process able to connect", zap.String("url", endpointURL("127.0.0.1", localPort, false, mcpEndpointPath)))
-		logger.Info("Serving Aperture MCP on trusted loopback", zap.String("transport", streamableHTTPTransportName), zap.String("url", endpointURL("127.0.0.1", localPort, false, apertureEndpointPath)))
+		logger.Warn("Trusted loopback MCP enabled for every process able to connect")
+		if cli.Tailscale {
+			logger.Info("Serving Tailscale MCP on trusted loopback", zap.String("transport", streamableHTTPTransportName), zap.String("url", endpointURL("127.0.0.1", localPort, false, mcpEndpointPath)))
+		}
+		if cli.Aperture {
+			logger.Info("Serving Aperture MCP on trusted loopback", zap.String("transport", streamableHTTPTransportName), zap.String("url", endpointURL("127.0.0.1", localPort, false, apertureEndpointPath)))
+		}
 	}
 	return serveHTTPServers(ctx, 0, bindings...)
 }

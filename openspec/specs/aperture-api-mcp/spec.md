@@ -4,6 +4,34 @@ Define the Aperture MCP tool surface, offline API contract, identity-aware clien
 
 ## Requirements
 
+### Requirement: Aperture requires explicit HTTP opt-in
+The system SHALL support boolean `--aperture` / `TS_MCP_APERTURE`, defaulting to false, independently of boolean `--tailscale` / `TS_MCP_TAILSCALE`, defaulting to true. Explicit flags SHALL override environment values, including `--tailscale=false` overriding `TS_MCP_TAILSCALE=true`. `--aperture` and `--aperture=true` SHALL enable Aperture in HTTP mode; an explicit `--aperture=false` SHALL override `TS_MCP_APERTURE=true`. Configuring `--aperture-url` / `APERTURE_URL` alone SHALL NOT enable Aperture. When disabled, the system SHALL NOT validate the Aperture URL, construct its upstream client, register its tools, or log its endpoint URLs, and `/aperture/mcp` SHALL return 404 on tailnet and enabled loopback listeners. Aperture enablement SHALL NOT change Tailscale enablement. Stdio SHALL ignore Aperture enablement and URL configuration, remain Tailscale-only, and require Tailscale enabled for serving.
+
+#### Scenario: Aperture runs without the Tailscale MCP service
+- **WHEN** HTTP serving starts with `--tailscale=false --aperture`
+- **THEN** Aperture uses the shared tsnet transport and node identity with the existing enrollment credential and advertised tags where applicable, without requiring `TAILSCALE_TAILNET` or Admin API read scopes
+- **AND** `/mcp` and `/tailscale/mcp` return 404 on both enabled listener types, no Tailscale tools, resources, prompts, or Admin API clients are initialized, no Admin API validation occurs, and no Tailscale MCP endpoint URLs are logged
+
+#### Scenario: Aperture is disabled by default
+- **WHEN** HTTP serving starts with Tailscale enabled and without an Aperture enablement flag or environment opt-in
+- **THEN** only the Tailscale service is available, no Aperture tools or client are initialized, no Aperture endpoint URLs are logged, and `/aperture/mcp` returns 404 on both enabled listener types
+
+#### Scenario: URL configuration does not enable Aperture
+- **WHEN** only `--aperture-url` or `APERTURE_URL` is configured, even with a malformed URL
+- **THEN** Aperture remains disabled and the URL is not validated or used to construct an upstream client
+
+#### Scenario: Operator enables Aperture
+- **WHEN** HTTP serving starts with `--aperture=true`, bare `--aperture`, or `TS_MCP_APERTURE=true` without a flag override
+- **THEN** its route, five tools, upstream client, and endpoint URL logs are enabled independently of whether Tailscale MCP is enabled
+
+#### Scenario: Explicit false overrides environment opt-in
+- **WHEN** HTTP serving starts with `TS_MCP_APERTURE=true` and `--aperture=false`, even with a malformed Aperture URL
+- **THEN** Aperture remains disabled without URL validation, client construction, tool registration, or endpoint URL logs, and its route returns 404 on both enabled listener types
+
+#### Scenario: Stdio ignores Aperture settings
+- **WHEN** stdio starts with Tailscale enabled, Aperture enabled by flag or environment, and a malformed Aperture URL
+- **THEN** it serves only Tailscale without validating the URL, initializing an Aperture client, registering Aperture tools, or opening HTTP listeners
+
 ### Requirement: Aperture contract is cached for offline use
 The repository SHALL retain the Aperture OpenAPI document at `tools/aperture/openapi.json` and metadata identifying its source URL, retrieval date, SHA-256, API/OpenAPI versions, and operation/path counts. The initial source SHALL be `http://ai/aperture/openapi.json`. Builds, automated tests, startup, and tool registration SHALL NOT fetch the live schema. An explicit refresh command SHALL validate a downloaded candidate before replacing the snapshot and metadata, preserving the previous cache on download or validation failure.
 
@@ -20,7 +48,7 @@ The repository SHALL retain the Aperture OpenAPI document at `tools/aperture/ope
 - **THEN** refresh fails and the existing snapshot and metadata remain intact
 
 ### Requirement: All cached Aperture operations have explicit tool mappings
-The Aperture MCP server SHALL expose exactly the following initial mappings as typed tools with matching trusted metadata. Every cached operation SHALL have one documented mapping; coverage tests SHALL detect missing, duplicate, or stale mappings. No Aperture resources or prompts SHALL be introduced.
+When enabled in HTTP mode, the Aperture MCP server SHALL expose exactly the following initial mappings as typed tools with matching trusted metadata. Every cached operation SHALL have one documented mapping; coverage tests SHALL detect missing, duplicate, or stale mappings. No Aperture resources or prompts SHALL be introduced.
 
 | Method and path | Operation ID | Tool and exact grant | Group | Read-only |
 | --- | --- | --- | --- | --- |
@@ -39,15 +67,19 @@ The Aperture MCP server SHALL expose exactly the following initial mappings as t
 - **THEN** the coverage check fails without automatically registering or granting the new operation
 
 ### Requirement: Aperture requests use a bounded identity-aware client
-HTTP mode SHALL use `--aperture-url` / `APERTURE_URL`, defaulting to `http://ai/aperture`, as its fixed operator-configured API base. Invalid HTTP(S) URLs or URLs containing userinfo, query, or fragment SHALL be rejected before serving. The client SHALL preserve the base path, dial through the running MCP tsnet node, verify HTTPS certificates normally, disable environment proxies and redirects, propagate cancellation, impose a 30-second request timeout, and limit response bodies to 16 MiB. It SHALL NOT forward Admin API credentials, incoming cookies, or caller identity headers. Upstream availability SHALL NOT be a startup prerequisite. Stdio SHALL NOT initialize this client.
+When Aperture is enabled for HTTP serving, the system SHALL use `--aperture-url` / `APERTURE_URL`, defaulting to `http://ai/aperture`, as its fixed operator-configured API base. Only in that mode SHALL invalid HTTP(S) URLs or URLs containing userinfo, query, or fragment be rejected before serving. The client SHALL preserve the base path, dial through the running MCP tsnet node, verify HTTPS certificates normally, disable environment proxies and redirects, propagate cancellation, impose a 30-second request timeout, and limit response bodies to 16 MiB. It SHALL NOT forward Admin API credentials, incoming cookies, or caller identity headers. Upstream availability SHALL NOT be a startup prerequisite. Disabled Aperture and stdio SHALL NOT validate the URL or initialize this client.
+
+#### Scenario: Enabled Aperture has an invalid base URL
+- **WHEN** HTTP serving starts with `--aperture` and an invalid base URL or one containing userinfo, query, or fragment
+- **THEN** startup fails before serving
 
 #### Scenario: Deployment uses tsnet without host Tailscale
 - **WHEN** an authorized caller invokes an Aperture operation
 - **THEN** the request uses the MCP tsnet node's identity and configured base path without relying on the host network identity
 
 #### Scenario: Aperture is unavailable
-- **WHEN** Aperture cannot be reached but Tailscale startup otherwise succeeds
-- **THEN** both MCP routes remain served and Aperture calls return bounded tool errors without preventing Tailscale operations
+- **WHEN** Aperture is enabled in HTTP mode and cannot be reached but startup otherwise succeeds
+- **THEN** all enabled MCP routes remain served and Aperture calls return bounded tool errors without preventing Tailscale operations when Tailscale is enabled
 
 #### Scenario: Redirect or oversized response is received
 - **WHEN** the backend redirects or exceeds the response limit

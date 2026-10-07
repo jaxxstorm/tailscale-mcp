@@ -358,10 +358,10 @@ func TestIndependentConfiguredServers(t *testing.T) {
 func TestOfflineToolGroupsDeterministic(t *testing.T) {
 	for _, local := range []bool{false, true} {
 		var first, second bytes.Buffer
-		if err := writeToolGroups(&first, local, false); err != nil {
+		if err := writeToolGroups(&first, CLI{Tailscale: true, LocalCLI: local}); err != nil {
 			t.Fatal(err)
 		}
-		if err := writeToolGroups(&second, local, false); err != nil {
+		if err := writeToolGroups(&second, CLI{Tailscale: true, LocalCLI: local}); err != nil {
 			t.Fatal(err)
 		}
 		if first.String() != second.String() {

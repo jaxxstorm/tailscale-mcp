@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/server"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	"tailscale.com/client/local"
 	"tailscale.com/ipn/ipnstate"
 	"tailscale.com/ipn/store/mem"
@@ -74,7 +76,7 @@ func TestTailnetReadinessCancellationBeforeBinding(t *testing.T) {
 			}
 			done := make(chan error, 1)
 			go func() {
-				done <- serveMCPHTTP(ctx, ts, nil, CLI{ApertureURL: "http://ai/aperture", TLS: secure, LocalHTTP: true}, 443, 8080, &MCPCapability{Tools: []string{"*"}})
+				done <- serveMCPHTTP(ctx, ts, nil, CLI{Tailscale: true, ApertureURL: "http://ai/aperture", TLS: secure, LocalHTTP: true}, 443, 8080, &MCPCapability{Tools: []string{"*"}})
 			}()
 			<-waiting
 			cancel()
@@ -103,7 +105,9 @@ func TestTailnetInitializationNeverRacesClose(t *testing.T) {
 		close: func() error { closes.Add(1); return nil },
 	}
 	done := make(chan error, 1)
-	go func() { done <- serveMCPHTTP(ctx, ts, nil, CLI{ApertureURL: "http://ai/aperture"}, 8080, 8080, nil) }()
+	go func() {
+		done <- serveMCPHTTP(ctx, ts, nil, CLI{Tailscale: true, ApertureURL: "http://ai/aperture"}, 8080, 8080, nil)
+	}()
 	<-starting
 	cancel()
 	select {
@@ -123,7 +127,7 @@ func TestTailnetInitializationNeverRacesClose(t *testing.T) {
 	}
 	// This SDK failure occurs before s.sys exists. Calling Close after it would
 	// panic; Start's own close-on-error pool is the appropriate cleanup path.
-	err := serveMCPHTTP(context.Background(), &tsnet.Server{Store: new(mem.Store)}, nil, CLI{ApertureURL: "http://ai/aperture"}, 8080, 8080, nil)
+	err := serveMCPHTTP(context.Background(), &tsnet.Server{Store: new(mem.Store)}, nil, CLI{Tailscale: true, ApertureURL: "http://ai/aperture"}, 8080, 8080, nil)
 	if err == nil || !strings.Contains(err.Error(), "in-memory store") {
 		t.Fatalf("SDK initialization error = %v", err)
 	}
@@ -150,7 +154,7 @@ func TestTailnetStartupErrorPreservation(t *testing.T) {
 		up:    func(context.Context) (*ipnstate.Status, error) { cancel(); return nil, context.Canceled },
 		close: func() error { return failure },
 	}
-	err := serveMCPHTTP(ctx, ts, nil, CLI{ApertureURL: "http://ai/aperture"}, 8080, 8080, nil)
+	err := serveMCPHTTP(ctx, ts, nil, CLI{Tailscale: true, ApertureURL: "http://ai/aperture"}, 8080, 8080, nil)
 	if !errors.Is(err, failure) || expectedCancellation(ctx, err) {
 		t.Fatalf("cleanup failure hidden: %v", err)
 	}
@@ -165,11 +169,48 @@ func TestRunExpectedStartupCancellation(t *testing.T) {
 	http.DefaultTransport = credentialRoundTripFunc(func(r *http.Request) (*http.Response, error) {
 		return nil, r.Context().Err()
 	})
-	if err := run(ctx, CLI{ApertureURL: "http://ai/aperture", Tailnet: "test", Credential: "test-only-token"}); err != nil {
+	if err := run(ctx, CLI{Tailscale: true, ApertureURL: "invalid://unused", Tailnet: "test", Credential: "test-only-token"}); err != nil {
 		t.Fatalf("expected cancellation returned failure: %v", err)
 	}
-	if err := run(ctx, CLI{ApertureURL: "http://ai/aperture", Tailnet: "test", Credential: "{"}); err == nil {
+	if err := run(ctx, CLI{Tailscale: true, ApertureURL: "http://ai/aperture", Tailnet: "test", Credential: "{"}); err == nil {
 		t.Fatal("signal suppressed invalid configuration")
+	}
+}
+
+func TestRunApertureOnlySkipsAdminAPI(t *testing.T) {
+	oldLogger, oldTransport := logger, http.DefaultTransport
+	logger = zap.NewNop()
+	defer func() { logger, http.DefaultTransport = oldLogger, oldTransport }()
+	http.DefaultTransport = credentialRoundTripFunc(func(*http.Request) (*http.Response, error) {
+		t.Error("Aperture-only startup contacted the Admin API")
+		return nil, errors.New("unexpected Admin API request")
+	})
+	for _, tc := range []struct {
+		name, credential, tags, want string
+		canceled                     bool
+	}{
+		{name: "enrollment credential required", want: "TAILSCALE_OAUTH_TOKEN"},
+		{name: "invalid enrollment credential", credential: "{", want: "TAILSCALE_OAUTH_TOKEN"},
+		{name: "OAuth enrollment tags required", credential: `{"type":"oauth","clientId":"test","clientSecret":"test-only-secret"}`, want: "TS_ADVERTISE_TAGS"},
+		{name: "bearer reaches state validation", credential: "test-only-token", want: "unsupported TSNET_STATE"},
+		{name: "OAuth reaches state validation", credential: `{"type":"oauth","clientId":"test","clientSecret":"test-only-secret"}`, tags: "tag:mcp-server", want: "unsupported TSNET_STATE"},
+		{name: "cancellation before tsnet", credential: "test-only-token", canceled: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if tc.canceled {
+				cancel()
+			}
+			err := run(ctx, CLI{Aperture: true, ApertureURL: "http://ai/aperture", Credential: tc.credential, AdvertiseTags: tc.tags, State: "invalid://must-not-initialize"})
+			if tc.canceled {
+				if err != nil {
+					t.Fatalf("expected cancellation: %v", err)
+				}
+			} else if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("startup error=%v, want %q", err, tc.want)
+			}
+		})
 	}
 }
 
@@ -326,7 +367,7 @@ func TestTailnetCanonicalHostProductionStack(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() {
-		done <- serveMCPHTTP(ctx, ts, server.NewMCPServer("host-test", "test"), CLI{ApertureURL: "http://ai/custom/aperture/", Hostname: "untrusted-cli-alias"}, 8080, 9090, nil)
+		done <- serveMCPHTTP(ctx, ts, server.NewMCPServer("host-test", "test"), CLI{Tailscale: true, Aperture: true, ApertureURL: "http://ai/custom/aperture/", Hostname: "untrusted-cli-alias"}, 8080, 9090, nil)
 	}()
 	defer func() {
 		cancel()
@@ -416,6 +457,149 @@ func TestTailnetCanonicalHostProductionStack(t *testing.T) {
 		if res.StatusCode != want || res.Header.Get("Location") != "" {
 			t.Fatalf("route %s after upstream failure: status=%d", path, res.StatusCode)
 		}
+	}
+}
+
+func TestTailnetApertureDisabledProductionStack(t *testing.T) {
+	oldLogger, oldTransport := logger, http.DefaultTransport
+	logger = zap.NewNop()
+	defer func() { logger, http.DefaultTransport = oldLogger, oldTransport }()
+	// Disabled startup must not clone the default transport to build an Aperture client.
+	http.DefaultTransport = credentialRoundTripFunc(func(*http.Request) (*http.Response, error) {
+		t.Error("disabled Aperture used the default HTTP transport")
+		return nil, errors.New("unexpected HTTP request")
+	})
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	lc := &local.Client{OmitAuth: true, Transport: credentialRoundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"CapMap":{"jaxxstorm.com/cap/mcp":[{"tools":["*"]}]}}`))}, nil
+	})}
+	var dialCalls atomic.Int32
+	ts := testTailnetServer{
+		start:  func() error { return nil },
+		up:     func(context.Context) (*ipnstate.Status, error) { return readyTailnetStatus(), nil },
+		client: func() (*local.Client, error) { return lc, nil },
+		listen: func(string, string) (net.Listener, error) { return tailnetRemoteListener{l}, nil },
+		dial: func(context.Context, string, string) (net.Conn, error) {
+			dialCalls.Add(1)
+			return nil, errors.New("disabled Aperture dial")
+		},
+		close: func() error { return nil },
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- serveMCPHTTP(ctx, ts, server.NewMCPServer("disabled-test", "test"), CLI{Tailscale: true, ApertureURL: "invalid://unused"}, 8080, 9090, nil)
+	}()
+	defer func() {
+		cancel()
+		if err := <-done; err != nil {
+			t.Error(err)
+		}
+	}()
+	transport := &http.Transport{}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport, Timeout: 3 * time.Second}
+	for _, path := range []string{apertureEndpointPath, mcpEndpointPath, legacyMCPEndpointPath} {
+		req, _ := http.NewRequest("POST", "http://"+l.Addr().String()+path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"disabled-test","version":"1"}}}`))
+		req.Host = "mcp.example.ts.net:8080"
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		res, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		want := http.StatusOK
+		if path == apertureEndpointPath {
+			want = http.StatusNotFound
+		}
+		if res.StatusCode != want || (want == http.StatusOK && !strings.Contains(string(body), "serverInfo")) {
+			t.Fatalf("route %s: status=%d body=%s", path, res.StatusCode, body)
+		}
+	}
+	if dialCalls.Load() != 0 {
+		t.Fatalf("disabled Aperture dial calls=%d", dialCalls.Load())
+	}
+}
+
+func TestTailnetTailscaleDisabledProductionStack(t *testing.T) {
+	core, logs := observer.New(zap.InfoLevel)
+	oldLogger := logger
+	logger = zap.New(core)
+	defer func() { logger = oldLogger }()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	lc := &local.Client{OmitAuth: true, Transport: credentialRoundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"CapMap":{"jaxxstorm.com/cap/mcp":[{"tools":["*"]}]}}`))}, nil
+	})}
+	ts := testTailnetServer{
+		start:  func() error { return nil },
+		up:     func(context.Context) (*ipnstate.Status, error) { return readyTailnetStatus(), nil },
+		client: func() (*local.Client, error) { return lc, nil },
+		listen: func(string, string) (net.Listener, error) { return tailnetRemoteListener{l}, nil },
+		dial: func(context.Context, string, string) (net.Conn, error) {
+			t.Error("startup or discovery contacted Aperture backend")
+			return nil, errors.New("unexpected backend dial")
+		},
+		close: func() error { return nil },
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		// A nil server catches unconditional Tailscale streamable construction.
+		done <- serveMCPHTTP(ctx, ts, nil, CLI{Aperture: true, ApertureURL: "http://ai/aperture", LocalHTTP: true}, 8080, 0, &MCPCapability{Tools: []string{"*"}})
+	}()
+	defer func() {
+		cancel()
+		if err := <-done; err != nil {
+			t.Error(err)
+		}
+	}()
+	client := &http.Client{Timeout: 3 * time.Second}
+	for _, path := range []string{mcpEndpointPath, legacyMCPEndpointPath, apertureEndpointPath} {
+		req, _ := http.NewRequest("POST", "http://"+l.Addr().String()+path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"aperture-only","version":"1"}}}`))
+		req.Host = "mcp.example.ts.net:8080"
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		res, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		want := http.StatusNotFound
+		if path == apertureEndpointPath {
+			want = http.StatusOK
+		}
+		if res.StatusCode != want || (want == http.StatusOK && !strings.Contains(string(body), "serverInfo")) {
+			t.Fatalf("route %s: status=%d body=%s", path, res.StatusCode, body)
+		}
+	}
+	var apertureURLs int
+	for _, entry := range logs.All() {
+		if raw, ok := entry.ContextMap()["url"].(string); ok {
+			endpoint, err := url.Parse(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if endpoint.Path == mcpEndpointPath || endpoint.Path == legacyMCPEndpointPath {
+				t.Errorf("disabled Tailscale URL advertised: %s", raw)
+			}
+			if strings.HasSuffix(raw, apertureEndpointPath) {
+				apertureURLs++
+			}
+		}
+	}
+	if apertureURLs != 2 {
+		t.Fatalf("Aperture listener URLs=%d, want 2", apertureURLs)
 	}
 }
 

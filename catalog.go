@@ -51,13 +51,16 @@ func newConfiguredMCPServer(tsClient *tsapi.Client, readClient readapi.Client, l
 }
 
 // writeToolGroups builds the configured surface without contacting either API.
-func writeToolGroups(w io.Writer, localCLI, stdio bool) error {
-	_, catalog, err := newConfiguredMCPServer(nil, readapi.Client{}, localCLI)
-	if err != nil {
-		return err
+func writeToolGroups(w io.Writer, cli CLI) error {
+	tools := []toolmeta.Tool{}
+	if cli.Tailscale {
+		_, catalog, err := newConfiguredMCPServer(nil, readapi.Client{}, cli.LocalCLI)
+		if err != nil {
+			return err
+		}
+		tools = append(tools, catalog.Tools()...)
 	}
-	tools := catalog.Tools()
-	if !stdio {
+	if cli.Aperture && !cli.Stdio {
 		_, apertureCatalog, err := newApertureMCPServer(aperture.Client{})
 		if err != nil {
 			return err

@@ -4,20 +4,47 @@ Define Streamable HTTP as the primary MCP transport and preserve stdio only as d
 
 ## Requirements
 
+Scenarios describing Tailscale serving, aliases, sessions, or protections assume Tailscale MCP is enabled unless explicitly stated otherwise. Disabled Tailscale routes return 404 rather than dispatching to an MCP handler.
+
 ### Requirement: Streamable HTTP is the primary transport
-The system SHALL expose MCP over Streamable HTTP as the primary supported transport for Tailscale tailnet access and explicitly enabled localhost access. It SHALL serve the Tailscale MCP at the preferred explicit `/tailscale/mcp` route and backward-compatible `/mcp` alias, and the separate Aperture MCP at `/aperture/mcp`, on the same listener and port for each enabled listener type. Both Tailscale paths SHALL use the same handler instance, server, catalog, and session state without redirecting.
+The system SHALL expose MCP over Streamable HTTP as the primary supported transport for Tailscale tailnet access and explicitly enabled localhost access. Only when boolean `--tailscale` / `TS_MCP_TAILSCALE` is enabled SHALL it serve the Tailscale MCP at the preferred explicit `/tailscale/mcp` route and backward-compatible `/mcp` alias. Tailscale SHALL default to enabled; bare `--tailscale` or `--tailscale=true` SHALL enable it, and `--tailscale=false` SHALL override `TS_MCP_TAILSCALE=true`. Independently, only when boolean `--aperture` / `TS_MCP_APERTURE` is enabled SHALL it serve the separate Aperture MCP at `/aperture/mcp` on the same listener and port for each enabled listener type. Aperture SHALL default to disabled; `--aperture=true` or bare `--aperture` SHALL enable it, and `--aperture=false` SHALL override `TS_MCP_APERTURE=true`. A configured Aperture URL alone SHALL NOT enable it. When Tailscale is enabled, both Tailscale paths SHALL use the same handler instance, server, catalog, and session state without redirecting, regardless of Aperture enablement.
+
+#### Scenario: Aperture-only HTTP overrides environment-enabled Tailscale
+- **WHEN** HTTP serving starts with `TS_MCP_TAILSCALE=true`, `--tailscale=false`, and `--aperture`
+- **THEN** only `/aperture/mcp` is served on tailnet and enabled loopback listeners, both `/mcp` and `/tailscale/mcp` return 404, and no Tailscale tools, resources, prompts, Admin API clients, Admin API validation, or Tailscale MCP endpoint URL logs are initialized or emitted
+- **AND** shared tsnet transport and identity remain active with the existing enrollment credential and advertised tags where applicable, without requiring `TAILSCALE_TAILNET` or Admin API read scopes
+
+#### Scenario: Both services are disabled for serving
+- **WHEN** serving is requested with both Tailscale and Aperture disabled
+- **THEN** startup fails with an actionable configuration error before any network access or listener initialization
+
+#### Scenario: Informational commands bypass serving checks
+- **WHEN** `--version` or `--list-groups` is requested with both services disabled or with `--stdio --tailscale=false`
+- **THEN** it exits successfully offline without serving validation, credentials, or network initialization, and group listing excludes disabled services and always excludes Aperture in stdio
 
 #### Scenario: Server starts with default transport
-- **WHEN** the server starts without legacy transport flags or local HTTP opt-in
-- **THEN** it serves both service-specific Streamable HTTP paths and the `/mcp` Tailscale alias on the tsnet listener and does not open a localhost listener
+- **WHEN** the server starts without legacy transport flags, Aperture opt-in, or local HTTP opt-in
+- **THEN** it serves `/tailscale/mcp` and the `/mcp` Tailscale alias on the tsnet listener, returns 404 for `/aperture/mcp`, and does not open a localhost listener
 
 #### Scenario: Local HTTP is enabled
-- **WHEN** the server starts in HTTP mode with `--local-http` and an explicit non-empty local grant
+- **WHEN** the server starts in HTTP mode with `--aperture`, `--local-http`, and an explicit non-empty local grant
 - **THEN** it also serves both service-specific paths and the `/mcp` Tailscale alias on `127.0.0.1` using the independently configured local port
 
 #### Scenario: Streamable HTTP endpoint is logged
 - **WHEN** Streamable HTTP serving starts
-- **THEN** logs identify each full service-specific URL, scheme, and Streamable HTTP transport rather than SSE or generic HTTP
+- **THEN** logs identify each enabled service's full URL, scheme, and Streamable HTTP transport rather than SSE or generic HTTP, and omit endpoint URLs for each disabled service
+
+#### Scenario: Disabled Aperture is unavailable on both listeners
+- **WHEN** HTTP serving starts with Aperture disabled and loopback explicitly enabled with local grants
+- **THEN** `/aperture/mcp` returns 404 on both tailnet and loopback, even with wildcard or exact Aperture grants, while `/mcp` and `/tailscale/mcp` retain their existing behavior
+
+#### Scenario: Explicit false overrides environment enablement
+- **WHEN** HTTP serving starts with `TS_MCP_APERTURE=true`, `--aperture=false`, and a malformed Aperture URL
+- **THEN** no Aperture URL validation, upstream client construction, tool registration, route serving, or endpoint URL logging occurs and `/aperture/mcp` returns 404 on both enabled listener types
+
+#### Scenario: URL alone does not enable the route
+- **WHEN** HTTP serving starts with `--aperture-url` or `APERTURE_URL` but without Aperture opt-in
+- **THEN** Aperture remains disabled and its URL is ignored, even if malformed
 
 ### Requirement: Streamable HTTP preserves grant enforcement
 The system SHALL apply request logging, origin checks, and `jaxxstorm.com/cap/mcp` permission evaluation before any tool or resource accesses Tailscale or Aperture data. Tailnet requests SHALL obtain identity and grants through Tailscale identity lookup; explicitly enabled loopback requests SHALL use only operator-configured local grants. All paths SHALL retain existing Host validation, body limits, deadlines, TLS behavior, and coordinated shutdown. `/mcp` and `/tailscale/mcp` SHALL have identical grants and transport protections on both listener types.
@@ -35,7 +62,11 @@ The system SHALL apply request logging, origin checks, and `jaxxstorm.com/cap/mc
 - **THEN** local grants do not grant that tailnet caller access on either Tailscale alias or the Aperture route
 
 ### Requirement: Legacy stdio transport is deprecated but preserved
-The system SHALL keep stdio mode available for compatibility while marking it as deprecated in CLI help, runtime logs, and documentation. Stdio SHALL remain Tailscale-only, use explicitly configured local grants, and SHALL NOT initialize tsnet or the Aperture client or require tsnet advertised tags.
+The system SHALL keep stdio mode available for compatibility while marking it as deprecated in CLI help, runtime logs, and documentation. Stdio serving SHALL require Tailscale enabled and reject `--stdio --tailscale=false` before network access even if Aperture is enabled. Stdio SHALL remain Tailscale-only, use explicitly configured local grants, and SHALL NOT initialize tsnet or the Aperture client or require tsnet advertised tags. It SHALL ignore `--aperture` / `TS_MCP_APERTURE` and `--aperture-url` / `APERTURE_URL`, without validating the URL or registering Aperture tools.
+
+#### Scenario: Stdio cannot serve Aperture instead of Tailscale
+- **WHEN** serving is requested with `--stdio --tailscale=false --aperture`
+- **THEN** startup fails before Admin API validation, tsnet initialization, or any network access
 
 #### Scenario: Stdio mode is selected
 - **WHEN** the server starts with the stdio flag
@@ -44,6 +75,10 @@ The system SHALL keep stdio mode available for compatibility while marking it as
 #### Scenario: Stdio has no local grants
 - **WHEN** a stdio caller invokes a protected operation without configured local grants
 - **THEN** the operation is denied before backend access
+
+#### Scenario: Stdio is selected with Aperture opt-in
+- **WHEN** the server starts with `--stdio` and `--aperture` or `TS_MCP_APERTURE=true`, even with a malformed Aperture URL
+- **THEN** Aperture settings are ignored, no Aperture URL validation or client initialization occurs, and only Tailscale tools are served without HTTP listeners or Aperture endpoint URL logs
 
 #### Scenario: Operator reads transport documentation
 - **WHEN** an operator reviews setup documentation
@@ -54,7 +89,7 @@ The system SHALL NOT direct new operators to configure SSE as the MCP transport.
 
 #### Scenario: Operator reads README transport guidance
 - **WHEN** the README describes remote MCP access
-- **THEN** it references Streamable HTTP and the `/tailscale/mcp` and `/aperture/mcp` endpoints without recommending SSE setup
+- **THEN** it references Streamable HTTP, the default `/tailscale/mcp` endpoint, and the opt-in `/aperture/mcp` endpoint without recommending SSE setup
 
 ### Requirement: tsnet Streamable HTTP uses server-specific state
 The system SHALL configure tsnet Streamable HTTP startup with a deterministic state directory specific to the configured server hostname, rather than relying on the shared tsnet default state directory.
@@ -79,11 +114,11 @@ The system SHALL register application build information with Tailscale before se
 - **THEN** build information for the running MCP server version is registered before the tsnet listener serves requests
 
 ### Requirement: MCP transport surface remains unchanged
-The system SHALL preserve existing Tailscale tool and resource identities and backend operation semantics while adding the preferred explicit `/tailscale/mcp` route and a separate Aperture surface at `/aperture/mcp`. It SHALL preserve explicit localhost opt-in, optional TLS, authorization/error handling, and curated wrappers. It SHALL NOT add arbitrary named profile URLs. Existing `/mcp` clients SHALL continue to work through a backward-compatible alias to the same Tailscale handler, server, catalog, and session state, without a redirect.
+When Tailscale is enabled, the system SHALL preserve existing Tailscale tool and resource identities and backend operation semantics at the preferred explicit `/tailscale/mcp` route and `/mcp` alias. It SHALL support an independently opt-in Aperture surface at `/aperture/mcp` and preserve explicit localhost opt-in, optional TLS, authorization/error handling, and curated wrappers. It SHALL NOT add arbitrary named profile URLs. While Tailscale is enabled, existing `/mcp` clients SHALL continue to work through a backward-compatible alias to the same Tailscale handler, server, catalog, and session state, without a redirect, whether Aperture is enabled or disabled. When Tailscale is disabled, both aliases SHALL return 404 instead.
 
 #### Scenario: Server starts with Streamable HTTP
-- **WHEN** the server starts without legacy transport flags
-- **THEN** it serves both service-specific endpoints and the `/mcp` Tailscale alias on tsnet and serves the same endpoints on localhost only when explicitly enabled with local grants
+- **WHEN** the server starts with Tailscale enabled and without legacy transport flags
+- **THEN** it serves `/tailscale/mcp` and the `/mcp` Tailscale alias on tsnet, adding `/aperture/mcp` only with Aperture opt-in, and serves the same enabled routes on localhost only when explicitly enabled with local grants
 
 #### Scenario: MCP authorization is evaluated
 - **WHEN** a Streamable HTTP request arrives through the tsnet listener
@@ -223,10 +258,10 @@ The system SHALL stop both listeners from accepting requests concurrently on SIG
 - **THEN** all listeners and tsnet are cleaned up and the process exits unsuccessfully
 
 ### Requirement: Service routes isolate MCP surfaces and state
-Each service SHALL use its own MCP server, catalog, and Streamable HTTP handler; `/mcp` and `/tailscale/mcp` SHALL be aliases of the same Tailscale service and share its handler and state. Tailscale tools, resources, and prompts SHALL be registered only on the Tailscale surface; Aperture tools SHALL be registered only on the Aperture surface. A session identifier from one service SHALL NOT attach a request to another service's session state or transfer permissions. Both services SHALL share the existing listener lifecycle without adding per-service ports.
+Each enabled service SHALL use its own MCP server, catalog, and Streamable HTTP handler; when Tailscale is enabled, `/mcp` and `/tailscale/mcp` SHALL be aliases of the same Tailscale service and share its handler and state. Tailscale tools, resources, and prompts SHALL be registered only when Tailscale is enabled and only on its surface; Aperture tools SHALL be registered only on the Aperture surface when enabled in HTTP mode. Disabled services SHALL have no registered tools or catalog entries, and disabled Tailscale SHALL have no resources or prompts. Grants SHALL NOT enable disabled services. A session identifier from one service SHALL NOT attach a request to another service's session state or transfer permissions. Both services, when enabled, SHALL share the existing listener lifecycle without adding per-service ports.
 
 #### Scenario: Caller discovers tools on each route
-- **WHEN** a caller with broad tool grants lists tools on each endpoint
+- **WHEN** both services are enabled in HTTP mode and a caller with broad tool grants lists tools on each endpoint
 - **THEN** `/mcp` and `/tailscale/mcp` list only Tailscale tools and `/aperture/mcp` lists only Aperture tools
 
 #### Scenario: Caller invokes a tool on the wrong service
