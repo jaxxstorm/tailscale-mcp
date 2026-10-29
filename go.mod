@@ -1,6 +1,6 @@
 module github.com/jaxxstorm/tailscale-mcp
 
-go 1.27.1
+go 1.27.3
 
 require (
 	github.com/alecthomas/kong v1.16.1
