@@ -14,7 +14,7 @@ require (
 	go.uber.org/zap v1.28.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/sys v0.49.0
-	golang.org/x/term v0.46.0
+	golang.org/x/term v0.47.0
 	gopkg.in/yaml.v3 v3.0.1
 	tailscale.com v1.104.0
 	tailscale.com/client/tailscale/v2 v2.11.0
