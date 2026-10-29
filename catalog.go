@@ -40,7 +40,7 @@ func newConfiguredMCPServer(tsClient *tsapi.Client, readClient readapi.Client, l
 		server.WithToolHandlerMiddleware(recoverTool),
 		server.WithResourceHandlerMiddleware(recoverResource),
 	)
-	registerCoreMCP(s, tsClient, check)
+	registerCoreMCP(s, tsClient, readClient, check)
 	readapi.RegisterTools(s, readClient, check)
 	readapi.RegisterResources(s, readClient, checkResourceAccess)
 	curatedtools.RegisterAll(s, curatedtools.Options{Client: readClient, Check: check, LocalCLI: localCLI})

@@ -516,6 +516,13 @@ When enabled, the server registers `tailscale_local_status`, `tailscale_ping`, `
 
 Common resources:
 
+`tailscale://devices`, `tailscale://device`, `tailscale://tailnet-settings`,
+`list_all_devices`, and `get_device_info` preserve fields returned by the API,
+including fields not yet modeled by the Go SDK (such as `postureStatus` and
+`adminConsoleSessionTimeoutMinutes`). Device lists remain arrays; device details
+and tailnet settings remain objects. Device lookup still accepts an ID, hostname,
+or IP address. Fields absent from the API response are not synthesized as SDK defaults.
+
 | URI | Description | Required Grant |
 |-----|-------------|----------------|
 | `bootstrap://status` | Health-check endpoint | `bootstrap://status` |

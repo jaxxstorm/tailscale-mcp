@@ -43,7 +43,7 @@ func TestConfiguredCatalogParity(t *testing.T) {
 			}
 			// Compare the complete schemas and annotations to unfiltered registration.
 			baseline := server.NewMCPServer("baseline", "test")
-			registerCoreMCP(baseline, nil, checkToolAccess)
+			registerCoreMCP(baseline, nil, readapi.Client{}, checkToolAccess)
 			readapi.RegisterTools(baseline, readapi.Client{}, checkToolAccess)
 			curatedtools.RegisterAll(baseline, curatedtools.Options{LocalCLI: local})
 			if len(baseline.ListTools()) != len(c.Tools()) {
