@@ -1044,7 +1044,7 @@ func serveMCPHTTP(ctx context.Context, tsServer tailnetServer, mcpServer *server
 	return serveHTTPServers(ctx, 0, bindings...)
 }
 
-func registerCoreMCP(mcpServer *server.MCPServer, tsAdminClient *tsapi.Client, check readapi.AccessChecker) {
+func registerCoreMCP(mcpServer *server.MCPServer, tsAdminClient *tsapi.Client, readClient readapi.Client, check readapi.AccessChecker) {
 	logger := zap.L()
 	logger.Debug("Adding prompts capability")
 	mcpServer.AddPrompt(mcp.NewPrompt("empty"),
@@ -1068,7 +1068,7 @@ func registerCoreMCP(mcpServer *server.MCPServer, tsAdminClient *tsapi.Client, c
 				return nil, err
 			}
 
-			devices, err := tsAdminClient.Devices().ListWithAllFields(ctx)
+			devices, err := listRawDevices(ctx, readClient, true)
 			if err != nil {
 				logger.Error("Failed to list devices", zap.Error(err))
 				return nil, err
@@ -1124,7 +1124,7 @@ func registerCoreMCP(mcpServer *server.MCPServer, tsAdminClient *tsapi.Client, c
 				return nil, err
 			}
 
-			settings, err := tsAdminClient.TailnetSettings().Get(ctx)
+			settings, err := readClient.Do(ctx, readapi.Endpoint{Method: "GET", Path: "/tailnet/{tailnet}/settings"}, nil)
 			if err != nil {
 				logger.Error("Failed to fetch tailnet settings", zap.Error(err))
 				return nil, fmt.Errorf("failed to fetch tailnet settings: %w", err)
@@ -1151,7 +1151,7 @@ func registerCoreMCP(mcpServer *server.MCPServer, tsAdminClient *tsapi.Client, c
 			if err := checkResourceAccess(ctx, "tailscale://device"); err != nil {
 				return nil, err
 			}
-			device, err := findDevice(ctx, tsAdminClient, deviceID)
+			device, err := findDevice(ctx, readClient, deviceID)
 			if err != nil {
 				logger.Error("Failed to find device", zap.String("device_id", deviceID), zap.Error(err))
 				return nil, err
@@ -1189,7 +1189,7 @@ func registerCoreMCP(mcpServer *server.MCPServer, tsAdminClient *tsapi.Client, c
 		}
 		logger.Debug("Tool parameters", zap.String("device_id", deviceID))
 
-		device, err := findDevice(ctx, tsAdminClient, deviceID)
+		device, err := findDevice(ctx, readClient, deviceID)
 		if err != nil {
 			logger.Error("Device lookup failed", zap.String("device_id", deviceID), zap.Error(err))
 			return mcp.NewToolResultErrorFromErr("Device lookup failed", err), nil
@@ -1215,7 +1215,7 @@ func registerCoreMCP(mcpServer *server.MCPServer, tsAdminClient *tsapi.Client, c
 				return mcp.NewToolResultError(err.Error()), nil
 			}
 
-			devices, err := tsAdminClient.Devices().List(ctx)
+			devices, err := listRawDevices(ctx, readClient, false)
 			if err != nil {
 				logger.Error("Failed to list devices", zap.Error(err))
 				return mcp.NewToolResultErrorFromErr("Failed to list devices", err), nil
@@ -1231,21 +1231,48 @@ func registerCoreMCP(mcpServer *server.MCPServer, tsAdminClient *tsapi.Client, c
 		})
 }
 
+// listRawDevices unwraps the API envelope without decoding device fields through the SDK.
+func listRawDevices(ctx context.Context, client readapi.Client, allFields bool) ([]json.RawMessage, error) {
+	args := map[string]any{}
+	if allFields {
+		args["fields"] = "all"
+	}
+	raw, err := client.Do(ctx, readapi.Endpoint{Method: "GET", Path: "/tailnet/{tailnet}/devices", Parameters: []readapi.Parameter{{Name: "fields", Location: readapi.QueryParam}}}, args)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Devices []json.RawMessage `json:"devices"`
+	}
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return nil, err
+	}
+	return response.Devices, nil
+}
+
 // findDevice finds a device by ID, hostname, or IP and fetches detailed information.
-func findDevice(ctx context.Context, client *tsapi.Client, id string) (*tsapi.Device, error) {
-	devices, err := client.Devices().List(ctx)
+func findDevice(ctx context.Context, client readapi.Client, id string) (json.RawMessage, error) {
+	devices, err := listRawDevices(ctx, client, false)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, d := range devices {
-		if d.ID == id || d.Hostname == id {
-			return client.Devices().GetWithAllFields(ctx, d.ID)
+	for _, raw := range devices {
+		// Decode only lookup fields; return the untouched detail response.
+		var d struct {
+			ID        string   `json:"id"`
+			Hostname  string   `json:"hostname"`
+			Addresses []string `json:"addresses"`
 		}
+		if err := json.Unmarshal(raw, &d); err != nil {
+			return nil, err
+		}
+		matched := d.ID == id || d.Hostname == id
 		for _, addr := range d.Addresses {
-			if addr == id {
-				return client.Devices().GetWithAllFields(ctx, d.ID)
-			}
+			matched = matched || addr == id
+		}
+		if matched {
+			return client.Do(ctx, readapi.Endpoint{Method: "GET", Path: "/device/{deviceId}", Parameters: []readapi.Parameter{readapi.RequiredPath("deviceId", "Device ID"), {Name: "fields", Location: readapi.QueryParam}}}, map[string]any{"deviceId": d.ID, "fields": "all"})
 		}
 	}
 
