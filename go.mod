@@ -1,6 +1,6 @@
 module github.com/jaxxstorm/tailscale-mcp
 
-go 1.27.3
+go 1.27.4
 
 require (
 	github.com/alecthomas/kong v1.16.1
@@ -16,7 +16,7 @@ require (
 	golang.org/x/sys v0.49.0
 	golang.org/x/term v0.47.0
 	gopkg.in/yaml.v3 v3.0.1
-	tailscale.com v1.104.6
+	tailscale.com v1.104.7
 	tailscale.com/client/tailscale/v2 v2.12.0
 )
 
