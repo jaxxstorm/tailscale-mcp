@@ -13,8 +13,8 @@ require (
 	github.com/tailscale/hujson v0.0.0-20260727124030-b80ff77dac4f
 	go.uber.org/zap v1.28.0
 	golang.org/x/oauth2 v0.37.0
-	golang.org/x/sys v0.49.0
-	golang.org/x/term v0.47.0
+	golang.org/x/sys v0.50.0
+	golang.org/x/term v0.48.0
 	gopkg.in/yaml.v3 v3.0.1
 	tailscale.com v1.104.6
 	tailscale.com/client/tailscale/v2 v2.12.0
